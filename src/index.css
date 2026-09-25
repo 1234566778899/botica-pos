@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+/*
+ * Tokens medidos del admin de Shopify (referencia visual, sin usar su código):
+ * marco oscuro #1b1b1b, panel blanco con radio 16, Inter 13px, tarjetas con
+ * radio 20 y sombra en capas, campos de 30px con borde de sombra 1px.
+ * El color de marca de la botica (verde farmacia) se usa para acentos y el botón de cobrar.
+ */
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --color-frame: #1b1b1b;
+  --color-frame-hover: #2a2a2a;
+  --color-frame-active: #303030;
+  --color-frame-text: rgba(255, 255, 255, 0.82);
+
+  --color-ink: #101010;
+  --color-ink-secondary: #616161;
+  --color-ink-tertiary: #8a8a8a;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f7f7f7;
+  --color-surface-hover: #f1f1f1;
+  --color-surface-pressed: #ebebeb;
+  --color-border: #e3e3e3;
+  --color-border-strong: #cccccc;
+
+  --color-brand: #0a7a5f;
+  --color-brand-dark: #075c47;
+  --color-brand-soft: #e6f5ef;
+
+  --color-button: #303030;
+  --color-button-hover: #1a1a1a;
+
+  --color-success: #0c5132;
+  --color-success-soft: #cdfee1;
+  --color-info: #00527c;
+  --color-info-soft: #e0f0ff;
+  --color-warning: #5e4200;
+  --color-warning-soft: #ffef9d;
+  --color-critical: #8e0b21;
+  --color-critical-soft: #fee9e8;
+  --color-critical-strong: #c70a24;
+
+  --shadow-card: 0 0 2px rgba(0, 0, 0, 0.24), 0 2px 12px rgba(0, 0, 0, 0.02), 0 4px 16px rgba(0, 0, 0, 0.02), 0 4px 48px rgba(0, 0, 0, 0.02);
+  --shadow-field: 0 2px 3px -1px rgba(0, 0, 0, 0.04), 0 3px 4px -1.5px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.13);
+  --shadow-button: 0 1px 0 rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.12);
+  --shadow-popover: 0 0 2px rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-frame);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 20px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Títulos de página: 26px / 500 / -0.02em */
+.page-title {
+  font-size: 26px;
+  line-height: 32px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 1px;
+}
+
+/* Ticket de venta: al imprimir solo se ve el ticket (80 mm). */
+@media print {
+  @page { size: 80mm auto; margin: 4mm; }
+  body { background: #fff; }
+  body * { visibility: hidden; }
+  #ticket-print, #ticket-print * { visibility: visible; }
+  #ticket-print { position: absolute; inset: 0 auto auto 0; width: 72mm; }
+}
