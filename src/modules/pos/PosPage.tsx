@@ -1,13 +1,15 @@
-import { AlertTriangle, Minus, Plus, Printer, Receipt, ScanBarcode, Search, ShoppingCart, Trash2, UserRound, Wallet, X } from "lucide-react";
+import { AlertTriangle, Minus, Plus, Printer, Receipt, ScanBarcode, Search, ShoppingCart, Smartphone, Trash2, UserRound, Wallet, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useBusiness } from "@/components/layout/AppFrame";
 import { Badge, Spinner, cn, useToast } from "@/components/ui";
 import { daysUntil, expiryLabel, formatExpiry, formatMoney, formatUnits, extraConcentration } from "@/lib/format";
 import type { PaymentMethod, ProductStock, SaleDetail, SaleUnit } from "@/lib/types";
+import { useStaff } from "@/modules/auth/AuthProvider";
 import { useCashCurrent, useCategories, useCreateSale, useOpenCash, usePosProducts } from "./api";
 import { defaultUnit, unitPrice, unitsPer, useCart } from "./cart";
 import { PaymentModal } from "./PaymentModal";
+import { type PhoneScanResult, usePhoneScanner } from "./phoneScanner";
 import { equivalents, exactCodeMatch, searchProducts } from "./search";
 import { printTicket, Ticket, ticketNumber } from "./Ticket";
 
@@ -218,6 +220,27 @@ export function PosPage() {
     );
   };
 
+  // Celular como escáner inalámbrico (app Android con la misma cuenta).
+  const staff = useStaff();
+  const onPhoneScan = useCallback((code: string): PhoneScanResult => {
+    if (paying || done) return { ok: false, text: "La web está cobrando: termina la venta primero" };
+    const p = exactCodeMatch(all, code);
+    if (!p) {
+      toast(`📱 Código ${code} no registrado`, { error: true });
+      return { ok: false, text: `Código ${code} no registrado en la web` };
+    }
+    const unit = defaultUnit(p);
+    const left = p.stock - unitsInCart(p.id);
+    if (left < (unit === "caja" ? p.units_per_pack : 1)) {
+      toast(`📱 ${p.name}: sin stock disponible`, { error: true });
+      return { ok: false, text: `${p.name}: sin stock` };
+    }
+    dispatch({ type: "add", product: p, unit });
+    toast(`📱 ${p.name}${p.requires_prescription ? " · requiere receta" : ""}`);
+    return { ok: true, text: p.name };
+  }, [all, dispatch, done, paying, toast, unitsInCart]);
+  const phoneConnected = usePhoneScanner(cash.data ? staff.user_id : undefined, onPhoneScan);
+
   const newSale = useCallback(() => {
     dispatch({ type: "clear" });
     setDone(null);
@@ -257,6 +280,12 @@ export function PosPage() {
                 </span>
               )}
             </div>
+            {phoneConnected && (
+              <span className="flex shrink-0 items-center gap-2 rounded-[12px] bg-brand-soft px-3 py-2 text-[12px] font-[550] text-brand-dark" title="Escanea con la app del celular: los productos aparecen aquí">
+                <span className="relative flex size-2"><span className="absolute inline-flex size-full animate-ping rounded-full bg-brand opacity-60" /><span className="relative inline-flex size-2 rounded-full bg-brand" /></span>
+                <Smartphone className="size-4" /> Celular conectado
+              </span>
+            )}
             <Link to="/caja" className="hidden shrink-0 items-center gap-2 rounded-[12px] bg-success-soft px-3 py-2 text-[12px] text-success md:flex" title="Ver caja">
               <Wallet className="size-4" />
               <span><span className="block font-[650]">Caja abierta</span>{cash.data.sales_count} ventas · {formatMoney(cash.data.sales_total)}</span>

@@ -122,6 +122,9 @@ export type Sale = {
   created_at: string;
   voided_at: string | null;
   void_reason: string | null;
+  /** Venta hecha en la app Android: cuándo llegó al servidor y qué no cuadró al sincronizarla. */
+  synced_at?: string | null;
+  sync_notes?: string | null;
 };
 
 /** Venta completa devuelta por pos_create_sale / pos_sale (para el ticket). */

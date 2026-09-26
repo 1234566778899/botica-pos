@@ -33,6 +33,14 @@ export function SaleDetailPage() {
       {sale.status === "anulada" && (
         <div className="mb-4"><Banner tone="critical" title="Venta anulada">{formatDateTime(sale.voided_at)} · {sale.void_reason}. El stock se devolvió a sus lotes.</Banner></div>
       )}
+      {sale.sync_notes && (
+        <div className="mb-4">
+          <Banner tone="warning" title="Venta hecha sin conexión en la app">
+            Se sincronizó el {formatDateTime(sale.synced_at)} con estas diferencias:
+            <ul className="mt-1 list-disc pl-5">{sale.sync_notes.split("\n").map((n) => <li key={n}>{n}</li>)}</ul>
+          </Banner>
+        </div>
+      )}
       <Layout
         aside={
           <>

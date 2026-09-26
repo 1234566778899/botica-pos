@@ -35,3 +35,6 @@ CUADRO.pdf
 supabase/data/
 supabase/.temp/
 .vercel
+
+# App Android: se mantiene solo en local (no se sube al repo)
+android/
