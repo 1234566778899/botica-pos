@@ -11,7 +11,7 @@ export type PhoneScanResult = { ok: boolean; text: string };
  *
  * Devuelve si hay un celular conectado en modo escáner.
  */
-export function usePhoneScanner(userId: string | undefined, onScan: (code: string) => PhoneScanResult) {
+export function usePhoneScanner(userId: string | undefined, onScan: (code: string) => Promise<PhoneScanResult>) {
   const [phoneConnected, setPhoneConnected] = useState(false);
   const handler = useRef(onScan);
   useEffect(() => { handler.current = onScan; }, [onScan]);
@@ -27,9 +27,9 @@ export function usePhoneScanner(userId: string | undefined, onScan: (code: strin
       if (closed) return;
       channel = supabase.channel(`scanner:${userId}`, { config: { private: true, presence: { key: `web-${crypto.randomUUID()}` } } });
       channel
-        .on("broadcast", { event: "scan" }, ({ payload }) => {
+        .on("broadcast", { event: "scan" }, async ({ payload }) => {
           const { id, code } = payload as { id: string; code: string };
-          const result = handler.current(String(code ?? "").trim());
+          const result = await handler.current(String(code ?? "").trim()).catch(() => ({ ok: false, text: "La web no pudo buscar el código" }));
           channel?.send({ type: "broadcast", event: "ack", payload: { id, ...result } });
         })
         .on("presence", { event: "sync" }, () => {

@@ -158,6 +158,14 @@ export function PosPage() {
   const results = useMemo(() => searchProducts(all, query, category).slice(0, MAX_RESULTS), [all, query, category]);
   const available = (p: ProductStock) => p.stock - unitsInCart(p.id);
 
+  // El catálogo está en memoria: si el código no aparece puede ser que se registró después
+  // (p. ej. desde la app Android), así que se recarga una vez antes de darlo por desconocido.
+  const { refetch: refetchProducts } = products;
+  const findByCode = useCallback(
+    async (code: string) => exactCodeMatch(all, code) ?? exactCodeMatch((await refetchProducts()).data ?? [], code),
+    [all, refetchProducts],
+  );
+
   const focusSearch = () => searchRef.current?.focus();
 
   const add = useCallback((p: ProductStock, unit: SaleUnit = defaultUnit(p)) => {
@@ -201,7 +209,9 @@ export function PosPage() {
       // Lector de código de barras: escribe el código y Enter.
       const exact = exactCodeMatch(all, query);
       const target = exact ?? results[active];
-      if (target) add(target, e.shiftKey && target.units_per_pack > 1 ? "caja" : defaultUnit(target));
+      const box = e.shiftKey;
+      if (target) add(target, box && target.units_per_pack > 1 ? "caja" : defaultUnit(target));
+      else if (query.trim()) findByCode(query).then((p) => p && add(p, box && p.units_per_pack > 1 ? "caja" : defaultUnit(p)));
     }
   };
 
@@ -222,9 +232,9 @@ export function PosPage() {
 
   // Celular como escáner inalámbrico (app Android con la misma cuenta).
   const staff = useStaff();
-  const onPhoneScan = useCallback((code: string): PhoneScanResult => {
+  const onPhoneScan = useCallback(async (code: string): Promise<PhoneScanResult> => {
     if (paying || done) return { ok: false, text: "La web está cobrando: termina la venta primero" };
-    const p = exactCodeMatch(all, code);
+    const p = await findByCode(code);
     if (!p) {
       toast(`📱 Código ${code} no registrado`, { error: true });
       return { ok: false, text: `Código ${code} no registrado en la web` };
@@ -238,7 +248,7 @@ export function PosPage() {
     dispatch({ type: "add", product: p, unit });
     toast(`📱 ${p.name}${p.requires_prescription ? " · requiere receta" : ""}`);
     return { ok: true, text: p.name };
-  }, [all, dispatch, done, paying, toast, unitsInCart]);
+  }, [dispatch, done, findByCode, paying, toast, unitsInCart]);
   const phoneConnected = usePhoneScanner(cash.data ? staff.user_id : undefined, onPhoneScan);
 
   const newSale = useCallback(() => {
