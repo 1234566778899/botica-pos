@@ -36,10 +36,11 @@ psql '<cadena>' -f supabase/seed.sql                      # alternativa: datos d
   - La venta descuenta **FEFO**: primero el lote que vence antes, y nunca un lote vencido.
   - Lo vendible es `lot.expiry_date >= internal.today()`.
 - **Kardex** (`stock_movement`): todo cambio de stock queda registrado con el saldo resultante. Tipos: compra, venta, anulación, ajuste, vencido, merma.
+- **Una sola caja para toda la botica**: como máximo un `cash_session` abierto (índice único). Cualquiera del personal la abre, vende en ella y la cierra; se cierra para todos. `user_id` = quien abrió, `closed_by` = quien cerró. Usa `internal.open_session()`, nunca busques el turno por `auth.uid()`.
 - **Precios con IGV incluido** (18 %, configurable en `business`). En el ticket el total se separa en op. gravada + IGV.
 - **Fechas en hora de Lima.** En SQL usa `internal.today()` y `created_at at time zone 'America/Lima'`, nunca `current_date`, porque Supabase corre en UTC. En el front usa `todayLima()`. Perú es UTC−5 todo el año.
 - **Roles** (`staff.role`):
-  - `cajero`: vende, ve ventas, maneja su caja y registra ingresos.
+  - `cajero`: vende, ve **solo sus propias ventas** (RLS de `sale`, `sale_list`, `pos_sale`, `pos_sales_summary`), abre y cierra la caja y registra ingresos.
   - `admin`: además ve el panel y la utilidad, edita productos, anula ventas, ajusta lotes y gestiona usuarios.
   - Alta de usuarios: el primer usuario ejecuta `bootstrap_owner`; los demás piden acceso con `request_access` y un admin los aprueba en Configuración → Usuarios.
 
@@ -50,6 +51,8 @@ psql '<cadena>' -f supabase/seed.sql                      # alternativa: datos d
   - `inv_receive_purchase`, `inv_adjust_lot`, `inv_write_off_expired`
   - `cash_open`, `cash_close`
   - `dashboard`
+  - `pos_sync_sale`, `cash_sync_open`, `cash_sync_close` (app Android, ver abajo)
+  - `inv_set_barcode`: todo el personal (también cajeros) puede asignar o quitar **solo** el código de barras de un producto; rechaza códigos que ya tiene otro producto.
 - Los precios y el stock de una venta se recalculan en el servidor; nunca confíes en los del cliente.
 - Tablas de catálogo (product, category, supplier, customer): el admin las escribe directo, protegido por RLS. Stock, ventas, compras y caja **no** tienen políticas de escritura: solo cambian por los workflows.
 - Las vistas `product_stock` y `lot_status` son `security_invoker`. Las vistas `*_list` corren como dueño y filtran con `internal.is_staff()`.
@@ -60,3 +63,20 @@ psql '<cadena>' -f supabase/seed.sql                      # alternativa: datos d
   - F2 va al buscador y F9 cobra.
   - El lector de código de barras escribe el código y manda Enter.
 - UI en español de Perú. Montos con `formatMoney` ("S/ 1,259.90") y stock con `formatUnits` ("3 cajas + 12 u.").
+
+## App Android (`android/`)
+
+Caja y ventas sin conexión: Kotlin + Jetpack Compose + Room (SQLite) + WorkManager + supabase-kt 3.8. AGP 9.1 con Kotlin integrado, compileSdk 36 (no subas el BOM de Compose a 2026.08+: pide SDK 37).
+
+```bash
+cd android && JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradlew :app:assembleDebug
+```
+
+- `android/local.properties` (fuera de git) lleva `sdk.dir`, `supabase.url` y `supabase.key` (solo la publishable key).
+- **Local primero.** Cada venta y cada turno se guardan en Room con un uuid generado en el teléfono y luego se suben (`data/sync/SyncManager.kt`): aperturas → ventas → cierres → bajar catálogo, stock y turno actual. Las RPC son idempotentes por id: reintentar nunca duplica.
+- Con internet la venta se envía con `strict: true` y el servidor la valida como en la web (si la rechaza, no se guarda). Sin internet queda pendiente; al subirla el servidor no la rechaza por falta de stock ni por producto desactivado: la registra y anota la diferencia en `sale.sync_notes`. El precio cobrado sin conexión solo se respeta si el producto cambió después de que el teléfono bajó el catálogo (`catalog_at`).
+- Stock disponible en el teléfono = stock descargado − unidades de ventas con `applied = false` − carrito. `applied` pasa a true cuando se descarga un catálogo que ya las incluye.
+- Si la caja ya estaba abierta (en la web o por otro usuario), `cash_sync_open` devuelve ese turno y la app lo adopta (`cash_session.serverId`).
+- Pantallas: Vender, Productos (detalle, lotes y registro de códigos de barras), Ventas (historial del servidor + ventas del teléfono por subir) y Caja, con barra inferior.
+- Escáner propio con CameraX + ML Kit con el modelo **incluido** (`ui/components/Scanner.kt`): funciona sin internet desde la instalación. No uses el lector de Play Services (`play-services-code-scanner`): descarga su módulo la primera vez y sin internet no abre. En Vender el escáner es continuo (modo lector); en Productos lee un código y cierra.
+- Códigos registrados sin conexión van a la tabla local `barcode_change` y se aplican al catálogo local al instante; `replaceCatalog` los vuelve a aplicar mientras sigan pendientes. Room está en la versión 2: un cambio de esquema necesita una `Migration` (nunca `fallbackToDestructiveMigration`, borraría ventas sin subir).

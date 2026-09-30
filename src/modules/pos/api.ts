@@ -20,14 +20,20 @@ export function useCategories() {
 }
 
 export function useCashCurrent() {
-  return useQuery({ queryKey: ["cash-current"], queryFn: async () => unwrap(await supabase.rpc("cash_current")) as CashSummary | null });
+  // La caja es una sola para toda la botica: otro usuario puede abrirla o cerrarla en cualquier momento.
+  return useQuery({
+    queryKey: ["cash-current"],
+    queryFn: async () => unwrap(await supabase.rpc("cash_current")) as CashSummary | null,
+    staleTime: 10_000, refetchInterval: 30_000, refetchOnWindowFocus: true,
+  });
 }
 
 export function useOpenCash() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (amount: number) => unwrap(await supabase.rpc("cash_open", { p_amount: amount })) as CashSummary,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["cash-current"] }),
+    // Si falla porque otro usuario ya la abrió, recargar muestra esa caja.
+    onSettled: () => qc.invalidateQueries({ queryKey: ["cash-current"] }),
   });
 }
 
@@ -47,5 +53,7 @@ export function useCreateSale() {
       qc.invalidateQueries({ queryKey: ["sales"] });
       qc.invalidateQueries({ queryKey: ["products"] });
     },
+    // Puede fallar porque otro usuario cerró la caja: recargarla muestra la pantalla de apertura.
+    onError: () => qc.invalidateQueries({ queryKey: ["cash-current"] }),
   });
 }

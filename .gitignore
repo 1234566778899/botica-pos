@@ -38,3 +38,6 @@ supabase/.temp/
 
 # App Android: se mantiene solo en local (no se sube al repo)
 android/
+
+# APK de la app Android (se genera en local)
+*.apk

@@ -41,3 +41,18 @@ Punto de venta e inventario para boticas (Perú): venta rápida con buscador por
 | **Vencimientos** | Lotes por vencer, próximos 30 días y vencidos; baja masiva de vencidos. |
 | **Kardex** (admin) | Todos los movimientos de stock con su saldo. |
 | **Configuración** (admin) | Datos del ticket, IGV, aviso de vencimiento, usuarios, categorías y proveedores. |
+
+## App Android (caja y ventas sin internet)
+
+En `android/` hay una app nativa (Kotlin + Jetpack Compose) con **Vender** y **Caja** que sigue funcionando si se va el internet: guarda todo en el teléfono (SQLite/Room) y lo sube sola al volver la conexión. También se puede sincronizar a mano desde Caja.
+
+1. Aplica la migración `supabase/migrations/20260926000100_offline_sync.sql` (`supabase db push`).
+2. Crea `android/local.properties`:
+   ```properties
+   sdk.dir=/ruta/al/Android/sdk
+   supabase.url=https://<ref>.supabase.co
+   supabase.key=<publishable key>
+   ```
+3. Abre `android/` en Android Studio y ejecuta, o `./gradlew :app:assembleDebug`.
+
+Tiene cuatro pestañas: **Vender**, **Productos** (detalle con stock, lotes y el código de barras; se registra escaneando la caja con la cámara), **Ventas** (historial con detalle) y **Caja**. Una vez registrados los códigos, se vende escaneando con la cámara del celular, sin lector láser. Se entra con la misma cuenta de la web (la primera vez necesita internet). Busca por nombre, principio activo o código, y escanea con la cámara o con un lector USB/Bluetooth. Cobra en efectivo (con vuelto), Yape, Plin, tarjeta o transferencia, y comparte el ticket.

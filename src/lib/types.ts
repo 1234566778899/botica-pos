@@ -139,7 +139,9 @@ export type CashSummary = {
   expected_cash: number | null;
   counted_cash: number | null;
   note: string | null;
+  closed_by: string | null;
   cashier: string | null;
+  closed_by_name: string | null;
   sales_count: number;
   sales_total: number;
   voided_count: number;

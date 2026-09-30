@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Badge, Card, cn, EmptyState, IndexTable, Page, Select, type Column } from "@/components/ui";
 import { addDays, formatDateTime, formatMoney, paymentLabels, todayLima } from "@/lib/format";
+import { useIsAdmin } from "@/modules/auth/AuthProvider";
 import { ticketNumber } from "@/modules/pos/Ticket";
 import { PAGE_SIZE, useSales, useSaleTotals, type SaleFilters, type SaleRow } from "./api";
 
@@ -15,6 +16,7 @@ const presets = [
 
 export function SalesPage() {
   const navigate = useNavigate();
+  const isAdmin = useIsAdmin();
   const today = todayLima();
   const [f, setF] = useState<SaleFilters>({ from: today, to: today, status: "todas", method: "", search: "", page: 1 });
   const set = (patch: Partial<SaleFilters>) => setF({ ...f, page: 1, ...patch });
@@ -29,7 +31,8 @@ export function SalesPage() {
     { key: "n", header: "Ticket", render: (s) => <span className="font-[650] tabular-nums">{ticketNumber(s.number)}</span> },
     { key: "d", header: "Fecha", render: (s) => formatDateTime(s.created_at) },
     { key: "c", header: "Cliente", render: (s) => s.customer_name || s.customer_doc || <span className="text-ink-tertiary">—</span> },
-    { key: "u", header: "Cajero", render: (s) => s.cashier ?? <span className="text-ink-tertiary">—</span> },
+    // El cajero solo ve sus propias ventas (lo filtra el servidor): la columna sobra.
+    ...(isAdmin ? [{ key: "u", header: "Cajero", render: (s: SaleRow) => s.cashier ?? <span className="text-ink-tertiary">—</span> }] : []),
     { key: "m", header: "Pago", render: (s) => paymentLabels[s.payment_method] },
     { key: "s", header: "Estado", render: (s) => (s.status === "anulada" ? <Badge tone="critical">Anulada</Badge> : <Badge tone="success">Completada</Badge>) },
     { key: "i", header: "Artículos", align: "right", render: (s) => s.item_count },
@@ -37,7 +40,7 @@ export function SalesPage() {
   ];
 
   return (
-    <Page icon={Receipt} title="Ventas">
+    <Page icon={Receipt} title={isAdmin ? "Ventas" : "Mis ventas"} subtitle={isAdmin ? undefined : "Solo ves las ventas que registraste tú."}>
       <div className="mb-3 flex flex-wrap items-end gap-2">
         <div className="flex rounded-[10px] bg-surface-pressed/70 p-0.5">
           {presets.map((p) => (
