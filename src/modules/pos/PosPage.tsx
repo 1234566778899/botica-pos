@@ -5,9 +5,10 @@ import { useBusiness } from "@/components/layout/AppFrame";
 import { Badge, Spinner, cn, useToast } from "@/components/ui";
 import { daysUntil, expiryLabel, formatExpiry, formatMoney, formatUnits, extraConcentration } from "@/lib/format";
 import type { Customer, PaymentMethod, ProductStock, SaleDetail, SaleUnit } from "@/lib/types";
+import { supabase, translateError } from "@/lib/supabase";
 import { useStaff } from "@/modules/auth/AuthProvider";
 import { useCashCurrent, useCategories, useCreateSale, useOpenCash, usePosProducts } from "./api";
-import { defaultUnit, unitPrice, unitsPer, useCart } from "./cart";
+import { defaultUnit, readStored, unitPrice, unitsPer, useCart, writeStored } from "./cart";
 import { CustomerPicker } from "./CustomerPicker";
 import { PaymentModal } from "./PaymentModal";
 import { type PhoneScanResult, usePhoneScanner } from "./phoneScanner";
@@ -15,6 +16,9 @@ import { equivalents, exactCodeMatch, searchProducts } from "./search";
 import { printTicket, Ticket, ticketNumber } from "./Ticket";
 
 const MAX_RESULTS = 60;
+
+/** Sin respuesta del servidor: no se sabe si la venta llegó a registrarse. */
+const isConnectionError = (e: Error) => /No se pudo conectar|Failed to fetch|NetworkError|Load failed|abort|timed? ?out/i.test(e.message);
 
 function OpenCash() {
   const open = useOpenCash();
@@ -142,7 +146,10 @@ export function PosPage() {
   const { data: business } = useBusiness();
   const createSale = useCreateSale();
   const toast = useToast();
-  const { lines, dispatch, totals, unitsInCart } = useCart(Number(business?.igv_rate ?? 18));
+  const staff = useStaff();
+  // La venta en curso se guarda en el navegador (por usuario): sobrevive a recargar o a volver a iniciar sesión.
+  const keys = { cart: `botica-cart:${staff.user_id}`, customer: `botica-cart-customer:${staff.user_id}`, sale: `botica-cart-sale:${staff.user_id}` };
+  const { lines, dispatch, totals, unitsInCart } = useCart(Number(business?.igv_rate ?? 18), keys.cart);
 
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string | null>(null);
@@ -151,11 +158,38 @@ export function PosPage() {
   const [payError, setPayError] = useState<string | null>(null);
   const [done, setDone] = useState<SaleDetail | null>(null);
   const [customerOpen, setCustomerOpen] = useState(false);
-  const [customer, setCustomer] = useState<Customer | null>(null);
+  const [customer, setCustomer] = useState<Customer | null>(() => readStored<Customer | null>(keys.customer, null));
+  useEffect(() => writeStored(keys.customer, customer), [keys.customer, customer]);
+
+  // Id del cobro: se genera al cobrar y se reusa en cada reintento, así un corte de internet o un
+  // doble clic nunca registra la venta dos veces (pos_create_sale es idempotente por id). Si el
+  // último intento quedó en duda (sin respuesta), el id se conserva aunque se recargue la página.
+  const saleId = useRef<string | null>(readStored<string | null>(keys.sale, null));
+  const cartSignature = useMemo(() => lines.map((l) => `${l.product.id}:${l.unit}:${l.quantity}`).join("|") + `#${customer?.id ?? ""}`, [lines, customer]);
+  // Al recargar o al cambiar el carrito después de un cobro en duda, se pregunta al servidor si
+  // esa venta llegó a registrarse: si llegó, se muestra su ticket; si no, el próximo cobro es nuevo.
+  useEffect(() => {
+    const pending = readStored<string | null>(keys.sale, null);
+    if (!pending) { saleId.current = null; return; }
+    let alive = true;
+    supabase.rpc("pos_sale", { p_sale: pending }).then(({ data, error }) => {
+      if (!alive || (error && isConnectionError(new Error(translateError(error.message))))) return; // sigue en duda
+      writeStored(keys.sale, null);
+      saleId.current = null;
+      if (data) {
+        setPaying(false);
+        setDone(data as SaleDetail);
+        toast(`La venta ${ticketNumber((data as SaleDetail).number)} sí se registró antes de cortarse la conexión.`);
+      }
+    });
+    return () => { alive = false; };
+  }, [cartSignature, keys.sale, toast]);
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
 
   const all = useMemo(() => products.data ?? [], [products.data]);
+  // El catálogo se recarga (stock, precios): el carrito guardado toma los datos nuevos.
+  useEffect(() => { if (products.data) dispatch({ type: "refresh", products: products.data }); }, [products.data, dispatch]);
   const results = useMemo(() => searchProducts(all, query, category).slice(0, MAX_RESULTS), [all, query, category]);
   const available = (p: ProductStock) => p.stock - unitsInCart(p.id);
 
@@ -217,22 +251,35 @@ export function PosPage() {
   };
 
   const confirmSale = (method: PaymentMethod, received?: number) => {
+    if (createSale.isPending) return;
     setPayError(null);
+    saleId.current ??= crypto.randomUUID();
+    const id = saleId.current;
+    writeStored(keys.sale, id);
     createSale.mutate(
       {
+        id,
         items: lines.map((l) => ({ product_id: l.product.id, unit: l.unit, quantity: l.quantity })),
         payment: { method, received },
         customer: customer ? { id: customer.id, doc_number: customer.doc_number, name: customer.name } : undefined,
       },
       {
-        onSuccess: (sale) => { setPaying(false); setDone(sale); },
-        onError: (err) => setPayError(err.message),
+        onSuccess: (sale) => { writeStored(keys.sale, null); setPaying(false); setDone(sale); },
+        onError: (err) => {
+          if (isConnectionError(err)) {
+            setPayError("No se pudo confirmar el cobro por la conexión. Vuelve a pulsar Cobrar: si ya se registró, no se cobrará dos veces.");
+          } else {
+            // El servidor la rechazó (stock, caja cerrada): no se registró nada, el próximo intento es un cobro nuevo.
+            writeStored(keys.sale, null);
+            saleId.current = null;
+            setPayError(err.message);
+          }
+        },
       },
     );
   };
 
   // Celular como escáner inalámbrico (app Android con la misma cuenta).
-  const staff = useStaff();
   const onPhoneScan = useCallback(async (code: string): Promise<PhoneScanResult> => {
     if (paying || done) return { ok: false, text: "La web está cobrando: termina la venta primero" };
     const p = await findByCode(code);
@@ -253,6 +300,7 @@ export function PosPage() {
   const phoneConnected = usePhoneScanner(cash.data ? staff.user_id : undefined, onPhoneScan);
 
   const newSale = useCallback(() => {
+    saleId.current = null;
     dispatch({ type: "clear" });
     setDone(null);
     setCustomer(null);

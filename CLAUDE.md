@@ -57,6 +57,12 @@ psql '<cadena>' -f supabase/seed.sql                      # alternativa: datos d
   - `customer_save`: todo el personal registra y edita clientes (ver "Clientes").
   - `inv_set_barcode`: todo el personal (también cajeros) puede asignar o quitar **solo** el código de barras de un producto; rechaza códigos que ya tiene otro producto.
 - Los precios y el stock de una venta se recalculan en el servidor; nunca confíes en los del cliente.
+- **Cobro web idempotente:** la web genera el id de la venta al cobrar (`p.id`) y lo reusa en cada reintento. `pos_create_sale` devuelve la venta existente en vez de duplicarla (doble clic o corte de internet después de registrarla).
+  - Si no hubo respuesta, el id queda en `localStorage` (`botica-cart-sale:<user>`). Al recargar o al cambiar el carrito, se pregunta a `pos_sale` si esa venta llegó a registrarse.
+  - El carrito y el cliente de la venta también se guardan en `localStorage` por usuario, así que sobreviven a recargar o a volver a iniciar sesión.
+- **Stock concurrente:** `internal.create_sale` bloquea el producto (`for update`) antes de leer los lotes, así que dos cajeros vendiendo lo último se atienden uno tras otro y el segundo recibe "Stock insuficiente". Si el cobro falla, la web recarga el catálogo.
+- **Sesión:** supabase-js emite `SIGNED_IN` cada vez que la pestaña vuelve a tener el foco. Si esa revalidación falla por la red y el mismo usuario ya estaba dentro, `AuthProvider` lo mantiene dentro: mostrar "No se pudo conectar" desmontaría la venta.
+- Los detalles con un id que no existe o está mal escrito muestran `NotFound` (componente de `src/components/ui`; `isUuid` está en `src/lib/supabase.ts`), nunca un formulario vacío ni el error de Postgres.
 - Tablas de catálogo (product, category, supplier, customer): el admin las escribe directo, protegido por RLS. Un `UPDATE` o `DELETE` que RLS bloquea **no da error**, solo afecta 0 filas: pide `.select()` y revisa que vuelva la fila (como en `useDeleteCustomer`). Stock, ventas, compras y caja **no** tienen políticas de escritura: solo cambian por los workflows.
 - Las vistas `product_stock` y `lot_status` son `security_invoker`. Las vistas `*_list` corren como dueño y filtran con `internal.is_staff()`.
 - Supabase activa **pg-safeupdate** en la API: todo `UPDATE`/`DELETE` necesita `WHERE`, también dentro de funciones (la fila única de `business` se actualiza con `where id = true`). El Postgres local de pruebas no lo tiene, así que revisa esto a mano.

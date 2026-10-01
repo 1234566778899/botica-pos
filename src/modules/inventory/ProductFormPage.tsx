@@ -1,7 +1,8 @@
 import { PackagePlus, SlidersHorizontal } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { Badge, Banner, Button, Card, CardHeader, Checkbox, Layout, Modal, Page, Select, Skeleton, TextArea, TextField, useToast } from "@/components/ui";
+import { isUuid } from "@/lib/supabase";
+import { Badge, Banner, Button, Card, CardHeader, Checkbox, Layout, Modal, NotFound, Page, Select, Skeleton, TextArea, TextField, useToast } from "@/components/ui";
 import { daysUntil, expiryLabel, formatLotDate, formatMoney, formatUnits, formLabels } from "@/lib/format";
 import type { DosageForm, Lot } from "@/lib/types";
 import { useIsAdmin } from "@/modules/auth/AuthProvider";
@@ -46,11 +47,12 @@ function AdjustModal({ lot, perPack, onClose }: { lot: Lot | null; perPack: numb
 export function ProductFormPage() {
   const { id } = useParams();
   const isNew = !id || id === "nuevo";
+  const valid = isNew || isUuid(id);
   const navigate = useNavigate();
   const toast = useToast();
   const isAdmin = useIsAdmin();
-  const { data: product, isLoading } = useProduct(isNew ? undefined : id);
-  const { data: lots = [] } = useProductLots(isNew ? undefined : id);
+  const { data: product, isLoading, error } = useProduct(isNew || !valid ? undefined : id);
+  const { data: lots = [] } = useProductLots(isNew || !valid ? undefined : id);
   const { data: categories = [] } = useCategories();
   const save = useSaveProduct();
   const [d, setD] = useState<ProductDraft>(blank);
@@ -64,7 +66,10 @@ export function ProductFormPage() {
   }, [product]);
 
   const crumbs = [{ label: "Productos", to: "/productos" }];
+  // Sin esto, un id que no existe mostraba el formulario vacío y "Guardar" intentaba editar un producto inexistente.
+  if (!valid || (!isNew && !isLoading && !error && !product)) return <NotFound title="Producto no encontrado" back={crumbs[0]} />;
   if (!isNew && isLoading) return <Page title="Producto" breadcrumbs={crumbs}><Skeleton className="h-96" /></Page>;
+  if (!isNew && error) return <Page title="Producto" breadcrumbs={crumbs}><Banner tone="critical">{error.message}</Banner></Page>;
 
   const set = (patch: Partial<ProductDraft>) => setD({ ...d, ...patch });
   const text = (k: keyof ProductDraft) => ({ value: (d[k] as string | null) ?? "", onChange: (e: React.ChangeEvent<HTMLInputElement>) => set({ [k]: e.target.value }), disabled: !isAdmin });

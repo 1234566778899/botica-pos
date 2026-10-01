@@ -1,4 +1,4 @@
-import { useMemo, useReducer } from "react";
+import { useEffect, useMemo, useReducer } from "react";
 import type { ProductStock, SaleUnit } from "@/lib/types";
 
 export type CartLine = { product: ProductStock; unit: SaleUnit; quantity: number };
@@ -8,7 +8,9 @@ type Action =
   | { type: "set-qty"; index: number; quantity: number }
   | { type: "set-unit"; index: number; unit: SaleUnit }
   | { type: "remove"; index: number }
-  | { type: "clear" };
+  | { type: "clear" }
+  /** Catálogo recargado: las líneas toman el precio y el stock nuevos. */
+  | { type: "refresh"; products: ProductStock[] };
 
 export const unitsPer = (line: Pick<CartLine, "product" | "unit">) => (line.unit === "caja" ? line.product.units_per_pack : 1);
 
@@ -33,11 +35,46 @@ function reducer(lines: CartLine[], action: Action): CartLine[] {
       return lines.filter((_, j) => j !== action.index);
     case "clear":
       return [];
+    case "refresh": {
+      const byId = new Map(action.products.map((p) => [p.id, p]));
+      let changed = false;
+      const next = lines.map((l) => {
+        const p = byId.get(l.product.id);
+        if (!p || p === l.product) return l;
+        changed = true;
+        return { ...l, product: p };
+      });
+      return changed ? next : lines;
+    }
   }
 }
 
-export function useCart(igvRate = 18) {
-  const [lines, dispatch] = useReducer(reducer, []);
+/** Lee un valor guardado en el navegador (puede fallar en modo privado o con los datos bloqueados). */
+export function readStored<T>(key: string | undefined, fallback: T): T {
+  if (!key) return fallback;
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function writeStored(key: string | undefined, value: unknown) {
+  if (!key) return;
+  try {
+    if (value == null || (Array.isArray(value) && value.length === 0)) localStorage.removeItem(key);
+    else localStorage.setItem(key, JSON.stringify(value));
+  } catch { /* sin almacenamiento: el carrito solo vive en memoria */ }
+}
+
+/**
+ * Carrito de la venta. Con `storageKey` se guarda en el navegador: si se recarga la página,
+ * se vence la sesión o se cae la conexión, la venta en curso no se pierde.
+ */
+export function useCart(igvRate = 18, storageKey?: string) {
+  const [lines, dispatch] = useReducer(reducer, storageKey, (key) => readStored<CartLine[]>(key, []).filter((l) => l?.product?.id && l.quantity > 0));
+  useEffect(() => writeStored(storageKey, lines), [storageKey, lines]);
   const totals = useMemo(() => {
     let total = 0;
     let igv = 0;

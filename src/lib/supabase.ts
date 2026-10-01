@@ -23,3 +23,6 @@ export function translateError(message: string) {
   if (/Failed to fetch/i.test(message)) return "No se pudo conectar con el servidor. Revisa tu conexión a internet.";
   return message;
 }
+
+/** ¿Parece un id de la base? Evita consultar (y mostrar el error de Postgres) con /ventas/abc. */
+export const isUuid = (id: string | undefined): id is string => !!id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);

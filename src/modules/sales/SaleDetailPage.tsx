@@ -1,7 +1,8 @@
 import { Ban, Printer } from "lucide-react";
 import { useState } from "react";
 import { useParams } from "react-router";
-import { Badge, Banner, Button, Card, CardHeader, Layout, Modal, Page, Skeleton, TextArea, useToast } from "@/components/ui";
+import { isUuid } from "@/lib/supabase";
+import { Badge, Banner, Button, Card, CardHeader, Layout, Modal, NotFound, Page, Skeleton, TextArea, useToast } from "@/components/ui";
 import { formatDateTime, formatMoney, paymentLabels } from "@/lib/format";
 import { useIsAdmin } from "@/modules/auth/AuthProvider";
 import { printTicket, Ticket, ticketNumber } from "@/modules/pos/Ticket";
@@ -9,7 +10,8 @@ import { useSale, useVoidSale } from "./api";
 
 export function SaleDetailPage() {
   const { id } = useParams();
-  const { data: sale, isLoading, error } = useSale(id);
+  const valid = isUuid(id);
+  const { data: sale, isLoading, error } = useSale(valid ? id : undefined);
   const isAdmin = useIsAdmin();
   const voidSale = useVoidSale();
   const toast = useToast();
@@ -17,6 +19,7 @@ export function SaleDetailPage() {
   const [reason, setReason] = useState("");
 
   const crumbs = [{ label: "Ventas", to: "/ventas" }];
+  if (!valid || (!isLoading && !error && !sale)) return <NotFound title="Venta no encontrada" back={crumbs[0]} />;
   if (isLoading) return <Page title="Venta" breadcrumbs={crumbs}><Skeleton className="h-80" /></Page>;
   if (error || !sale) return <Page title="Venta" breadcrumbs={crumbs}><Banner tone="critical">{error?.message ?? "Venta no encontrada"}</Banner></Page>;
 

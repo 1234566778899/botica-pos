@@ -19,7 +19,7 @@ export function useProduct(id: string | undefined) {
   return useQuery({
     queryKey: ["products", "detail", id],
     enabled: Boolean(id),
-    queryFn: async () => unwrap(await supabase.from("product_stock").select("*").eq("id", id!).single()) as ProductStock,
+    queryFn: async () => unwrap(await supabase.from("product_stock").select("*").eq("id", id!).maybeSingle()) as ProductStock | null,
   });
 }
 

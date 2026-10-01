@@ -1,7 +1,7 @@
 import { RefreshCw, TriangleAlert, WifiOff } from "lucide-react";
 import { createBrowserRouter, Navigate, Outlet, useRouteError } from "react-router";
 import { AppFrame } from "@/components/layout/AppFrame";
-import { Button, EmptyState } from "@/components/ui";
+import { Button, EmptyState, NotFound } from "@/components/ui";
 import { AccessGate } from "@/modules/auth/AccessGate";
 import { useIsAdmin } from "@/modules/auth/AuthProvider";
 
@@ -63,7 +63,7 @@ export const router = createBrowserRouter([
               { path: "configuracion/proveedores", lazy: lazy(() => import("@/modules/settings/SettingsPages"), "SuppliersSettingsPage") },
             ],
           },
-          { path: "*", element: <EmptyState title="Página no encontrada" description="Revisa la dirección o vuelve al inicio." /> },
+          { path: "*", element: <NotFound /> },
         ],
       },
     ],

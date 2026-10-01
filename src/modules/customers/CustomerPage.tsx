@@ -1,7 +1,8 @@
 import { Contact, Mail, Phone, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { Badge, Banner, Button, Card, CardHeader, Layout, Modal, Page, Skeleton, useToast } from "@/components/ui";
+import { isUuid } from "@/lib/supabase";
+import { Badge, Banner, Button, Card, CardHeader, Layout, Modal, NotFound, Page, Skeleton, useToast } from "@/components/ui";
 import { formatDate, formatDateTime, formatMoney, paymentLabels, pluralize } from "@/lib/format";
 import type { Customer } from "@/lib/types";
 import { useIsAdmin, useStaff } from "@/modules/auth/AuthProvider";
@@ -13,9 +14,11 @@ const crumbs = [{ label: "Clientes", to: "/clientes" }];
 
 export function CustomerPage() {
   const { id } = useParams();
-  const { data: customer, isLoading, error } = useCustomer(id);
+  const valid = isUuid(id);
+  const { data: customer, isLoading, error } = useCustomer(valid ? id : undefined);
+  if (!valid || (!isLoading && !error && !customer)) return <NotFound title="Cliente no encontrado" back={crumbs[0]} />;
   if (isLoading) return <Page title="Cliente" breadcrumbs={crumbs}><Skeleton className="h-80" /></Page>;
-  if (error || !customer) return <Page title="Cliente" breadcrumbs={crumbs}><Banner tone="critical">{error?.message ?? "Cliente no encontrado"}</Banner></Page>;
+  if (error || !customer) return <Page title="Cliente" breadcrumbs={crumbs}><Banner tone="critical">{error?.message ?? "No se pudo cargar el cliente"}</Banner></Page>;
   return <CustomerDetail key={customer.id} customer={customer} />;
 }
 

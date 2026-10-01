@@ -6,6 +6,7 @@ export * from "./Feedback";
 export * from "./Field";
 export * from "./IndexTable";
 export * from "./Modal";
+export * from "./NotFound";
 export * from "./Page";
 export * from "./Popover";
 export * from "./Thumbnail";

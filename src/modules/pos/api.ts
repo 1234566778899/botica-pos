@@ -38,6 +38,8 @@ export function useOpenCash() {
 }
 
 export type NewSale = {
+  /** Id generado en el navegador: reintentar con el mismo id no duplica la venta. */
+  id: string;
   items: { product_id: string; unit: SaleUnit; quantity: number }[];
   payment: { method: string; received?: number };
   customer?: { id: string; doc_number: string; name: string };
@@ -46,7 +48,8 @@ export type NewSale = {
 export function useCreateSale() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (sale: NewSale) => unwrap(await supabase.rpc("pos_create_sale", { p: sale })) as SaleDetail,
+    // Sin respuesta en 25 s se da por cortada (el reintento con el mismo id es seguro).
+    mutationFn: async (sale: NewSale) => unwrap(await supabase.rpc("pos_create_sale", { p: sale }).abortSignal(AbortSignal.timeout(25_000))) as SaleDetail,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["pos-products"] });
       qc.invalidateQueries({ queryKey: ["cash-current"] });
@@ -54,7 +57,11 @@ export function useCreateSale() {
       qc.invalidateQueries({ queryKey: ["products"] });
       qc.invalidateQueries({ queryKey: ["customers"] });
     },
-    // Puede fallar porque cerró la caja en el teléfono: recargarla muestra la pantalla de apertura.
-    onError: () => qc.invalidateQueries({ queryKey: ["cash-current"] }),
+    // Puede fallar porque cerró la caja en el teléfono (recargarla muestra la pantalla de apertura)
+    // o porque otro cajero vendió lo último (recargar el catálogo muestra el stock real).
+    onError: () => {
+      qc.invalidateQueries({ queryKey: ["cash-current"] });
+      qc.invalidateQueries({ queryKey: ["pos-products"] });
+    },
   });
 }

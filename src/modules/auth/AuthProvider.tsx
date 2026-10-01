@@ -1,5 +1,5 @@
 import type { Session } from "@supabase/supabase-js";
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Staff } from "@/lib/types";
 
@@ -31,9 +31,20 @@ async function resolveAccess(session: Session): Promise<AuthState> {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({ status: "loading" });
+  const current = useRef(state);
+  useEffect(() => { current.current = state; }, [state]);
 
   const load = useCallback(async (session: Session | null) => {
-    setState(session ? await resolveAccess(session) : { status: "signed-out" });
+    if (!session) return setState({ status: "signed-out" });
+    const next = await resolveAccess(session);
+    // supabase-js emite SIGNED_IN cada vez que la pestaña vuelve a tener el foco. Si el mismo usuario
+    // ya estaba dentro y la revalidación falla por la red, se queda dentro: reemplazar la app por
+    // "No se pudo conectar" desmontaría la venta en curso. (Si lo desactivaron, sí se le saca.)
+    const prev = current.current;
+    if (next.status === "error" && prev.status === "active" && prev.session.user.id === session.user.id) {
+      return setState({ ...prev, session });
+    }
+    setState(next);
   }, []);
 
   useEffect(() => {
