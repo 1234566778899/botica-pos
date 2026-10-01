@@ -82,8 +82,17 @@ export function useSaveCustomer() {
 export function useDeleteCustomer() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => unwrap(await supabase.from("customer").delete().eq("id", id).select("id")),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["customers"] }),
+    mutationFn: async (id: string) => {
+      const rows = unwrap(await supabase.from("customer").delete().eq("id", id).select("id"));
+      // RLS no da error si no puede borrar: simplemente no borra nada.
+      if (rows.length === 0) throw new Error("No se pudo eliminar el cliente (solo un administrador puede hacerlo)");
+      return id;
+    },
+    // Sin recargar la ficha: volvería vacía y la página mostraría "Cliente no encontrado" antes de salir de ella.
+    onSuccess: (id) => {
+      qc.setQueryData<Customer[]>(["customers"], (list) => list?.filter((c) => c.id !== id));
+      qc.invalidateQueries({ queryKey: ["customers"], exact: true });
+    },
   });
 }
 
