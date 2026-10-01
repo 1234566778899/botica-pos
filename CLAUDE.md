@@ -49,6 +49,7 @@ psql '<cadena>' -f supabase/seed.sql                      # alternativa: datos d
 - Toda escritura con lógica va por RPC `security definer` que valida el rol (`internal.assert_staff` / `assert_admin`):
   - `pos_create_sale`, `pos_void_sale`
   - `inv_receive_purchase`, `inv_adjust_lot`, `inv_write_off_expired`
+  - `inv_match_invoice`, `inv_receive_invoice` (ingreso desde la factura, ver abajo)
   - `cash_open`, `cash_close`
   - `dashboard`
   - `pos_sync_sale`, `cash_sync_open`, `cash_sync_close` (app Android, ver abajo)
@@ -63,6 +64,18 @@ psql '<cadena>' -f supabase/seed.sql                      # alternativa: datos d
   - F2 va al buscador y F9 cobra.
   - El lector de código de barras escribe el código y manda Enter.
 - UI en español de Perú. Montos con `formatMoney` ("S/ 1,259.90") y stock con `formatUnits` ("3 cajas + 12 u.").
+
+## Ingreso desde la factura (foto o PDF)
+
+En Ingresos → Nuevo, **Leer factura** sube una foto o PDF y rellena el ingreso. Todo el personal puede usarlo, también los cajeros, y crear productos nuevos así (decisión del dueño).
+
+- Edge Function `supabase/functions/inv-read-invoice` (Gemini `gemini-3.8-flash`, salida JSON con esquema, `thinkingLevel: low`, ~10 s). Valida la sesión y que sea personal activo; "Verify JWT" está apagado en el dashboard porque la función hace su propia validación. No guarda el archivo.
+- La clave de Gemini está en **Vault** (secreto `gemini_api_key`) y solo la lee `service_role` con `public.gemini_api_key()`. Nunca en el front ni en archivos versionados. Para cambiarla: `select vault.update_secret((select id from vault.secrets where name = 'gemini_api_key'), '<nueva>');`
+- La CLI de Supabase de esta máquina está en otra cuenta: la función se despliega pegando el código en el editor del dashboard (Edge Functions → inv-read-invoice → Code).
+- `inv_match_invoice` empareja cada línea: primero por el código del proveedor ya usado (`supplier_product`), si no por similitud de nombre (`internal.match_products`, castiga si la concentración no coincide). En el front: ≥ 0.7 se enlaza solo, 0.3–0.7 pide confirmar, menos es producto nuevo.
+- `inv_receive_invoice` hace todo en una transacción: crea el proveedor (por RUC o nombre) y los productos nuevos, recuerda los códigos del proveedor y llama a `internal.receive_purchase`. Rechaza una factura ya registrada del mismo proveedor (`internal.invoice_key` ignora espacios y guiones) salvo `allow_duplicate`.
+- Los precios impresos pueden venir con o sin IGV: se detecta comparando la suma de las líneas con el subtotal. El costo se guarda **sin IGV** (la botica recupera el crédito fiscal). Vencimiento "07/2029" = último día del mes.
+- Si la caja de la factura no coincide con la del catálogo (`units_per_pack`), la línea se registra en unidades y se avisa.
 
 ## App Android (`android/`)
 

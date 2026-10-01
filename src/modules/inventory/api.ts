@@ -97,6 +97,26 @@ export function useReceive() {
   });
 }
 
+export type NewProductInput = {
+  name: string; generic_name: string | null; form: string; presentation: string | null; laboratory: string | null;
+  units_per_pack: number; price_unit: number; price_pack: number | null;
+};
+
+export type InvoiceReceiveItem = Omit<ReceiveItem, "product_id"> & { product_id?: string; new_product?: NewProductInput; supplier_code?: string | null };
+
+/** Ingreso con proveedor y productos nuevos (desde la factura leída). Lo crea todo en una transacción. */
+export function useReceiveInvoice() {
+  const invalidate = useInvalidateStock();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (p: {
+      supplier_id: string | null; supplier: { name: string; ruc: string | null } | null; invoice_number: string; note: string;
+      allow_duplicate: boolean; items: InvoiceReceiveItem[];
+    }) => unwrap(await supabase.rpc("inv_receive_invoice", { p })) as { id: string; number: number },
+    onSuccess: () => { invalidate(); qc.invalidateQueries({ queryKey: ["suppliers"] }); },
+  });
+}
+
 export type MovementRow = {
   id: string; product_id: string; product_name: string; concentration: string | null; units_per_pack: number; lot_number: string | null; expiry_date: string | null;
   type: "compra" | "venta" | "anulacion" | "ajuste" | "vencido" | "merma"; units: number; balance: number; note: string | null; user_name: string | null; created_at: string;
