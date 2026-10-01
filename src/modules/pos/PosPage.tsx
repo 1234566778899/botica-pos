@@ -166,8 +166,10 @@ export function PosPage() {
           if (!alive) return;
           if (!name) { setLookup({ doc, state: "missing" }); return; }
           setLookup({ doc, state: "found" });
-          setCustomer((c) => (c.doc === doc && (!c.name.trim() || c.name === autoName.current) ? { ...c, name } : c));
+          // El updater corre después: compara con el nombre automático anterior, no con el nuevo.
+          const previous = autoName.current;
           autoName.current = name;
+          setCustomer((c) => (c.doc === doc && (!c.name.trim() || c.name === previous) ? { ...c, name } : c));
         },
         (e: Error) => alive && setLookup({ doc, state: "error", message: e.message }),
       );
@@ -433,7 +435,11 @@ export function PosPage() {
         <div className="shrink-0 space-y-3 border-t border-border bg-white p-4">
           {customerOpen ? (
             <div className="grid grid-cols-[120px_1fr_auto] gap-2">
-              <input placeholder="DNI / RUC" inputMode="numeric" value={customer.doc} onChange={(e) => setCustomer({ ...customer, doc: e.target.value.replace(/\D/g, "").slice(0, 11) })}
+              <input placeholder="DNI / RUC" inputMode="numeric" value={customer.doc} onChange={(e) => {
+                const doc = e.target.value.replace(/\D/g, "").slice(0, 11);
+                // Otro documento: el nombre que puso la búsqueda ya no corresponde (uno escrito a mano se respeta).
+                setCustomer({ doc, name: doc !== customer.doc && customer.name === autoName.current ? "" : customer.name });
+              }}
                 aria-label="DNI o RUC del cliente" className="h-9 rounded-[10px] px-3 text-[13px] shadow-field outline-none focus:shadow-[0_0_0_2px_var(--color-brand)]" />
               <input placeholder="Nombre del cliente" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
                 aria-label="Nombre del cliente" className="h-9 min-w-0 rounded-[10px] px-3 text-[13px] shadow-field outline-none focus:shadow-[0_0_0_2px_var(--color-brand)]" />
