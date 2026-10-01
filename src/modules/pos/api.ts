@@ -40,7 +40,7 @@ export function useOpenCash() {
 export type NewSale = {
   items: { product_id: string; unit: SaleUnit; quantity: number }[];
   payment: { method: string; received?: number };
-  customer?: { doc_number: string; name: string };
+  customer?: { id: string; doc_number: string; name: string };
 };
 
 export function useCreateSale() {
@@ -52,24 +52,9 @@ export function useCreateSale() {
       qc.invalidateQueries({ queryKey: ["cash-current"] });
       qc.invalidateQueries({ queryKey: ["sales"] });
       qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["customers"] });
     },
     // Puede fallar porque cerró la caja en el teléfono: recargarla muestra la pantalla de apertura.
     onError: () => qc.invalidateQueries({ queryKey: ["cash-current"] }),
   });
-}
-
-/**
- * Nombre del cliente por DNI (8) o RUC (11): primero los clientes ya registrados, si no api.migo.pe
- * (Edge Function customer-lookup). Devuelve null si no se encontró.
- */
-export async function lookupCustomer(doc: string): Promise<string | null> {
-  const { data, error } = await supabase.functions.invoke("customer-lookup", { body: { doc } });
-  if (error) {
-    const status = (error as { context?: Response }).context?.status;
-    if (status === 404) return null;
-    let message = error.message;
-    try { message = (await (error as { context?: Response }).context?.json())?.error ?? message; } catch { /* sin cuerpo */ }
-    throw new Error(message);
-  }
-  return (data as { name?: string })?.name ?? null;
 }

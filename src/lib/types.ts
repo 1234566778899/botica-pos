@@ -23,6 +23,39 @@ export type Business = {
 export type Category = { id: string; name: string; color: string; rank: number };
 export type Supplier = { id: string; name: string; ruc: string | null; phone: string | null; contact: string | null };
 
+export type DocType = "DNI" | "RUC" | "CE" | "PAS";
+
+/** Fila de la vista customer_list: el cliente y lo que compró (ventas completadas). */
+export type Customer = {
+  id: string;
+  doc_type: DocType;
+  doc_number: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+  sales_count: number;
+  sales_total: number;
+  last_sale_at: string | null;
+};
+
+/** Compra de un cliente (customer_sales). */
+export type CustomerSale = {
+  id: string;
+  number: number;
+  created_at: string;
+  status: "completada" | "anulada";
+  total: number;
+  payment_method: PaymentMethod;
+  item_count: number;
+  user_id: string | null;
+  cashier: string | null;
+  items: { product_name: string; unit: SaleUnit; quantity: number; total: number }[];
+};
+
 export type DosageForm =
   | "tableta" | "capsula" | "jarabe" | "suspension" | "gotas" | "crema" | "gel" | "unguento" | "inyectable" | "sobre" | "inhalador" | "ovulo" | "solucion" | "spray" | "otro";
 
@@ -107,6 +140,7 @@ export type Sale = {
   status: "completada" | "anulada";
   cash_session_id: string | null;
   user_id: string | null;
+  customer_id: string | null;
   customer_name: string | null;
   customer_doc: string | null;
   payment_method: PaymentMethod;

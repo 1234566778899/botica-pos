@@ -54,6 +54,7 @@ psql '<cadena>' -f supabase/seed.sql                      # alternativa: datos d
   - `cash_open`, `cash_close`
   - `dashboard`
   - `pos_sync_sale`, `cash_sync_open`, `cash_sync_close` (app Android, ver abajo)
+  - `customer_save`: todo el personal registra y edita clientes (ver "Clientes").
   - `inv_set_barcode`: todo el personal (también cajeros) puede asignar o quitar **solo** el código de barras de un producto; rechaza códigos que ya tiene otro producto.
 - Los precios y el stock de una venta se recalculan en el servidor; nunca confíes en los del cliente.
 - Tablas de catálogo (product, category, supplier, customer): el admin las escribe directo, protegido por RLS. Stock, ventas, compras y caja **no** tienen políticas de escritura: solo cambian por los workflows.
@@ -78,9 +79,14 @@ En Ingresos → Nuevo, **Leer factura** sube una foto o PDF y rellena el ingreso
 - Los precios impresos pueden venir con o sin IGV: se detecta comparando la suma de las líneas con el subtotal. El costo se guarda **sin IGV** (la botica recupera el crédito fiscal). Vencimiento "07/2029" = último día del mes.
 - Si la caja de la factura no coincide con la del catálogo (`units_per_pack`), la línea se registra en unidades y se avisa.
 
-## Cliente por DNI / RUC
+## Clientes
 
-Al escribir un DNI (8 dígitos) o RUC (11) del cliente en la venta (web y app), el nombre se completa solo con la Edge Function `customer-lookup`: primero busca en `customer` (no gasta consultas) y si no está consulta **api.migo.pe** y lo guarda en `customer`. El token de Migo está en Vault (`migo_token`, solo `service_role` con `public.migo_token()`). Si no se encuentra o no hay internet, el nombre se escribe a mano; nunca bloquea la venta. Solo reemplaza un nombre vacío o el que puso la búsqueda anterior.
+Pantalla **Clientes** (web `/clientes`; en la app, Ventas → Clientes). Todo el personal, también los cajeros, ve la lista, registra y edita clientes y ve su historial de compras completo, incluidas las ventas de otros cajeros (decisión del dueño). Eliminar un cliente es solo para el admin; sus ventas conservan el nombre y el documento.
+
+- `customer`: documento (DNI, RUC, CE, PAS; único), nombre, teléfono, correo, dirección y notas (sin datos de salud). La vista `customer_list` suma las compras completadas. `customer_sales(id)` da el historial con sus productos.
+- **En la venta solo se eligen clientes registrados** (búsqueda en memoria por DNI/RUC o nombre). Si no está, "Registrar cliente nuevo" abre la ficha con el documento escrito. La venta envía `customer.id`, y `sale.customer_name` y `customer_doc` guardan los datos de ese momento para el ticket. Si el id no existe (versiones antiguas o un cliente aún no sincronizado), `internal.create_sale` busca por documento o lo registra.
+- `customer_save(p)`: valida igual que el front, es idempotente por `id` y rechaza un documento repetido. La excepción: si el cliente que ya existe no tiene datos de contacto, se completa ese. Con `sync: true` (cola de la app) une los dos clientes y solo completa los datos vacíos.
+- **Nombre automático:** con un DNI (8) o RUC (11) completo, la ficha llama a la Edge Function `customer-lookup`. Esta busca primero en `customer` (no gasta consultas) y si no lo encuentra consulta **api.migo.pe**. **No guarda nada**: el cliente se registra al confirmar la ficha. El token de Migo está en Vault (`migo_token`, solo `service_role` con `public.migo_token()`). Si no se encuentra o no hay internet, el nombre se escribe a mano. Solo reemplaza un nombre vacío o el que puso la búsqueda anterior.
 
 ## App Android (`android/`)
 
@@ -95,8 +101,13 @@ cd android && JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/
 - Con internet la venta se envía con `strict: true` y el servidor la valida como en la web (si la rechaza, no se guarda). Sin internet queda pendiente; al subirla el servidor no la rechaza por falta de stock ni por producto desactivado: la registra y anota la diferencia en `sale.sync_notes`. El precio cobrado sin conexión solo se respeta si el producto cambió después de que el teléfono bajó el catálogo (`catalog_at`).
 - Stock disponible en el teléfono = stock descargado − unidades de ventas con `applied = false` − carrito. `applied` pasa a true cuando se descarga un catálogo que ya las incluye.
 - Si el usuario ya tenía su caja abierta (por ejemplo en la web), `cash_sync_open` devuelve ese turno y la app lo adopta (`cash_session.serverId`).
-- Pantallas: Vender, Inventario (Productos | Ingresos), Ventas (historial del servidor + ventas del teléfono por subir) y Caja, con barra inferior. En Inventario el botón ⊕ abre: Registrar ingreso, Leer factura y Nuevo producto; la ficha del producto tiene el atajo "Registrar ingreso".
+- Pantallas: Vender, Inventario (Productos | Ingresos), Ventas (Ventas | Clientes; el historial combina las ventas del servidor y las del teléfono por subir) y Caja, con barra inferior. En Inventario el botón ⊕ abre: Registrar ingreso, Leer factura y Nuevo producto; la ficha del producto tiene el atajo "Registrar ingreso".
 - **Ingresos** (`ui/receive/`): pantalla completa (Dialog) con escáner continuo (cada código suma una caja), búsqueda y lectura de factura (foto con la cámara vía FileProvider `${applicationId}.files`, o foto/PDF del teléfono). Usa las mismas RPC que la web (`inv_match_invoice`, `inv_receive_invoice`) y la Edge Function; esta se llama con `HttpURLConnection` (90 s) porque el cliente de Supabase corta a los 15 s. El ingreso lleva un `id` del teléfono (`purchase.client_id`): reintentar no lo duplica. Necesita internet. Lote vacío = `S/L`. Un código desconocido ofrece crear el producto (sin stock inicial) y se agrega al ingreso.
 - **Alta de productos** (`ui/products/NewProductSheet.kt`): botón + en Productos, "Crear producto nuevo" al escanear un código que no existe o al no encontrar una búsqueda. Necesita internet (no hay cola sin conexión). El stock inicial es un lote (`INICIAL` si no se escribe) con vencimiento MM/AAAA = último día del mes. El producto entra a Room al instante (`ProductStockDto.toEntity()`).
 - Escáner propio con CameraX + ML Kit con el modelo **incluido** (`ui/components/Scanner.kt`): funciona sin internet desde la instalación. No uses el lector de Play Services (`play-services-code-scanner`): descarga su módulo la primera vez y sin internet no abre. En Vender el escáner es continuo (modo lector); en Productos lee un código y cierra.
-- Códigos registrados sin conexión van a la tabla local `barcode_change` y se aplican al catálogo local al instante; `replaceCatalog` los vuelve a aplicar mientras sigan pendientes. Room está en la versión 2: un cambio de esquema necesita una `Migration` (nunca `fallbackToDestructiveMigration`, borraría ventas sin subir).
+- Códigos registrados sin conexión van a la tabla local `barcode_change` y se aplican al catálogo local al instante; `replaceCatalog` los vuelve a aplicar mientras sigan pendientes.
+- **Clientes sin conexión:** la tabla local `customer` es la copia de `customer_list` más los cambios pendientes (`state`). Un cliente nuevo lleva un uuid generado en el teléfono.
+  - Con internet se guarda de una vez con `customer_save` (`data/CustomerRepository.kt`). Sin internet queda en la cola, que sube **antes** que las ventas.
+  - Si el servidor lo unió a otro cliente con el mismo documento, `CustomerDao.saveSynced` borra el local y mueve sus ventas (`sale.customerId`) al id del servidor.
+  - El historial de compras de la ficha necesita internet.
+- Room está en la versión 3: un cambio de esquema necesita una `Migration` (nunca `fallbackToDestructiveMigration`, borraría ventas sin subir).

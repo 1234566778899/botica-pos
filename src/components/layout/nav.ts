@@ -1,4 +1,4 @@
-import { CalendarClock, ClipboardList, Home, Landmark, PackagePlus, Pill, Receipt, ScanBarcode, Settings, Store, Tags, Truck, Users, Wallet } from "lucide-react";
+import { CalendarClock, ClipboardList, Contact, Home, Landmark, PackagePlus, Pill, Receipt, ScanBarcode, Settings, Store, Tags, Truck, Users, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Role } from "@/lib/types";
 
@@ -9,6 +9,7 @@ export const mainNav: NavItem[] = [
   { label: "Vender", to: "/vender", icon: ScanBarcode },
   { label: "Inicio", to: "/", icon: Home, end: true, roles: ["admin"] },
   { label: "Ventas", to: "/ventas", icon: Receipt },
+  { label: "Clientes", to: "/clientes", icon: Contact },
   { label: "Caja", to: "/caja", icon: Wallet },
   { label: "Productos", to: "/productos", icon: Pill },
   { label: "Ingresos", to: "/ingresos", icon: PackagePlus },

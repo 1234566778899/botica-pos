@@ -1,5 +1,6 @@
 // Nombre del cliente por DNI (8 dígitos) o RUC (11). Primero busca en public.customer
-// (clientes que ya compraron: no gasta consultas); si no está, consulta api.migo.pe y lo guarda.
+// (clientes registrados: no gasta consultas); si no está, consulta api.migo.pe.
+// No guarda nada: el cliente se registra con la RPC customer_save cuando el cajero lo confirma.
 // El token de Migo está en Vault (public.migo_token(), solo service_role). Solo personal activo.
 // Responde { doc, name, source: "local" | "migo" } o 404 si no se encontró.
 
@@ -48,7 +49,6 @@ D.serve(async (req: Request) => {
       return json({ error: notFound ? "No se encontró ese documento" : "No se pudo consultar el documento" }, notFound ? 404 : 502);
     }
 
-    await admin.from("customer").upsert({ doc_type: kind.toUpperCase(), doc_number: doc, name }, { onConflict: "doc_number" });
     return json({ doc, name, source: "migo" });
   } catch (e) {
     return json({ error: e instanceof Error ? e.message : String(e) }, 500);

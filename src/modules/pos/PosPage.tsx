@@ -4,10 +4,11 @@ import { Link } from "react-router";
 import { useBusiness } from "@/components/layout/AppFrame";
 import { Badge, Spinner, cn, useToast } from "@/components/ui";
 import { daysUntil, expiryLabel, formatExpiry, formatMoney, formatUnits, extraConcentration } from "@/lib/format";
-import type { PaymentMethod, ProductStock, SaleDetail, SaleUnit } from "@/lib/types";
+import type { Customer, PaymentMethod, ProductStock, SaleDetail, SaleUnit } from "@/lib/types";
 import { useStaff } from "@/modules/auth/AuthProvider";
-import { lookupCustomer, useCashCurrent, useCategories, useCreateSale, useOpenCash, usePosProducts } from "./api";
+import { useCashCurrent, useCategories, useCreateSale, useOpenCash, usePosProducts } from "./api";
 import { defaultUnit, unitPrice, unitsPer, useCart } from "./cart";
+import { CustomerPicker } from "./CustomerPicker";
 import { PaymentModal } from "./PaymentModal";
 import { type PhoneScanResult, usePhoneScanner } from "./phoneScanner";
 import { equivalents, exactCodeMatch, searchProducts } from "./search";
@@ -150,32 +151,7 @@ export function PosPage() {
   const [payError, setPayError] = useState<string | null>(null);
   const [done, setDone] = useState<SaleDetail | null>(null);
   const [customerOpen, setCustomerOpen] = useState(false);
-  const [customer, setCustomer] = useState({ doc: "", name: "" });
-  const [lookup, setLookup] = useState<{ doc: string; state: "loading" | "found" | "missing" | "error"; message?: string } | null>(null);
-  const autoName = useRef("");
-
-  // DNI (8) o RUC (11) completo: busca el nombre. Solo reemplaza un nombre vacío o puesto por la búsqueda anterior.
-  useEffect(() => {
-    const doc = customer.doc;
-    if (doc.length !== 8 && doc.length !== 11) return; // el aviso solo se muestra si lookup.doc es el DNI actual
-    let alive = true;
-    const t = setTimeout(() => {
-      setLookup({ doc, state: "loading" });
-      lookupCustomer(doc).then(
-        (name) => {
-          if (!alive) return;
-          if (!name) { setLookup({ doc, state: "missing" }); return; }
-          setLookup({ doc, state: "found" });
-          // El updater corre después: compara con el nombre automático anterior, no con el nuevo.
-          const previous = autoName.current;
-          autoName.current = name;
-          setCustomer((c) => (c.doc === doc && (!c.name.trim() || c.name === previous) ? { ...c, name } : c));
-        },
-        (e: Error) => alive && setLookup({ doc, state: "error", message: e.message }),
-      );
-    }, 300);
-    return () => { alive = false; clearTimeout(t); };
-  }, [customer.doc]);
+  const [customer, setCustomer] = useState<Customer | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
 
@@ -246,7 +222,7 @@ export function PosPage() {
       {
         items: lines.map((l) => ({ product_id: l.product.id, unit: l.unit, quantity: l.quantity })),
         payment: { method, received },
-        customer: customer.doc.trim() ? { doc_number: customer.doc.trim(), name: customer.name.trim() } : undefined,
+        customer: customer ? { id: customer.id, doc_number: customer.doc_number, name: customer.name } : undefined,
       },
       {
         onSuccess: (sale) => { setPaying(false); setDone(sale); },
@@ -279,7 +255,7 @@ export function PosPage() {
   const newSale = useCallback(() => {
     dispatch({ type: "clear" });
     setDone(null);
-    setCustomer({ doc: "", name: "" });
+    setCustomer(null);
     setCustomerOpen(false);
     setTimeout(focusSearch, 0);
   }, [dispatch]);
@@ -433,28 +409,11 @@ export function PosPage() {
         </div>
 
         <div className="shrink-0 space-y-3 border-t border-border bg-white p-4">
-          {customerOpen ? (
-            <div className="grid grid-cols-[120px_1fr_auto] gap-2">
-              <input placeholder="DNI / RUC" inputMode="numeric" value={customer.doc} onChange={(e) => {
-                const doc = e.target.value.replace(/\D/g, "").slice(0, 11);
-                // Otro documento: el nombre que puso la búsqueda ya no corresponde (uno escrito a mano se respeta).
-                setCustomer({ doc, name: doc !== customer.doc && customer.name === autoName.current ? "" : customer.name });
-              }}
-                aria-label="DNI o RUC del cliente" className="h-9 rounded-[10px] px-3 text-[13px] shadow-field outline-none focus:shadow-[0_0_0_2px_var(--color-brand)]" />
-              <input placeholder="Nombre del cliente" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
-                aria-label="Nombre del cliente" className="h-9 min-w-0 rounded-[10px] px-3 text-[13px] shadow-field outline-none focus:shadow-[0_0_0_2px_var(--color-brand)]" />
-              <button type="button" onClick={() => { setCustomerOpen(false); setCustomer({ doc: "", name: "" }); }} aria-label="Quitar cliente" className="grid size-9 place-items-center rounded-[10px] hover:bg-surface-hover"><X className="size-4" /></button>
-              {lookup && lookup.doc === customer.doc && lookup.state !== "found" && (
-                <p className={cn("col-span-3 flex items-center gap-1.5 text-[12px]", lookup.state === "loading" ? "text-ink-secondary" : "text-warning")}>
-                  {lookup.state === "loading" && <><Spinner className="size-3.5" /> Buscando el nombre…</>}
-                  {lookup.state === "missing" && `No se encontró ese ${customer.doc.length === 8 ? "DNI" : "RUC"}: escribe el nombre.`}
-                  {lookup.state === "error" && `No se pudo buscar el nombre (${lookup.message}). Escríbelo.`}
-                </p>
-              )}
-            </div>
+          {customerOpen || customer ? (
+            <CustomerPicker customer={customer} onChange={setCustomer} onClose={() => { setCustomerOpen(false); focusSearch(); }} />
           ) : (
             <button type="button" onClick={() => setCustomerOpen(true)} className="flex items-center gap-1.5 text-[13px] text-brand hover:underline">
-              <UserRound className="size-4" /> Agregar cliente (DNI / RUC)
+              <UserRound className="size-4" /> Agregar cliente (DNI / RUC o nombre)
             </button>
           )}
 
