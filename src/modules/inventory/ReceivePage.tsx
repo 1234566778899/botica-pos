@@ -13,7 +13,7 @@ import { detectIgvIncluded, expiryDate, FOUND_SCORE, linePrice, matchInvoice, re
 /** Producto que no existe y se creará al registrar el ingreso. */
 type Draft = {
   name: string; generic_name: string | null; form: DosageForm; laboratory: string | null; presentation: string;
-  units_per_pack: number; price_unit: string; price_pack: string;
+  units_per_pack: number; price_unit: string; price_pack: string; barcode: string;
 };
 
 /** Línea leída de la factura: found = enlazada sola; review = hay que confirmar; new = se creará. */
@@ -88,7 +88,7 @@ function rowFromLine(line: InvoiceLine, product: ProductStock | null, src: Sourc
       ...base, product: null,
       draft: {
         name: line.name.toUpperCase(), generic_name: line.generic_name, form: line.form, laboratory: line.laboratory,
-        presentation: linePack > 1 ? `${unitWord} x ${linePack}` : unitWord, units_per_pack: linePack, price_unit: "", price_pack: "",
+        presentation: linePack > 1 ? `${unitWord} x ${linePack}` : unitWord, units_per_pack: linePack, price_unit: "", price_pack: "", barcode: "",
       },
       qty: String(line.quantity), unit: linePack > 1 ? "caja" : "unidad", cost: trim4(price),
     };
@@ -206,7 +206,7 @@ export function ReceivePage() {
           product_id: r.product?.id,
           new_product: r.draft ? {
             name: r.draft.name, generic_name: r.draft.generic_name, form: r.draft.form, presentation: r.draft.presentation || null,
-            laboratory: r.draft.laboratory, units_per_pack: r.draft.units_per_pack, price_unit: Number(r.draft.price_unit),
+            laboratory: r.draft.laboratory, barcode: r.draft.barcode.trim() || null, units_per_pack: r.draft.units_per_pack, price_unit: Number(r.draft.price_unit),
             price_pack: r.draft.price_pack ? Number(r.draft.price_pack) : null,
           } : undefined,
           supplier_code: r.src?.line.code ?? null,
@@ -364,6 +364,9 @@ export function ReceivePage() {
                           <TextField label="Precio venta caja" type="number" min="0" step="0.10" prefix="S/" value={r.draft.price_pack} placeholder="Opcional"
                             onChange={(e) => updateDraft(r.key, { price_pack: e.target.value })} />
                         ) : <div className="hidden sm:block" />}
+                        <TextField label="Código de barras" className="col-span-2 sm:col-span-1" value={r.draft.barcode} placeholder="Escanéalo o escríbelo"
+                          onChange={(e) => updateDraft(r.key, { barcode: e.target.value.replace(/\s/g, "") })}
+                          onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }} />
                       </div>
                     )}
 

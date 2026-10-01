@@ -98,7 +98,7 @@ export function useReceive() {
 }
 
 export type NewProductInput = {
-  name: string; generic_name: string | null; form: string; presentation: string | null; laboratory: string | null;
+  name: string; generic_name: string | null; form: string; presentation: string | null; laboratory: string | null; barcode: string | null;
   units_per_pack: number; price_unit: number; price_pack: number | null;
 };
 
