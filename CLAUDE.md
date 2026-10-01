@@ -78,6 +78,10 @@ En Ingresos → Nuevo, **Leer factura** sube una foto o PDF y rellena el ingreso
 - Los precios impresos pueden venir con o sin IGV: se detecta comparando la suma de las líneas con el subtotal. El costo se guarda **sin IGV** (la botica recupera el crédito fiscal). Vencimiento "07/2029" = último día del mes.
 - Si la caja de la factura no coincide con la del catálogo (`units_per_pack`), la línea se registra en unidades y se avisa.
 
+## Cliente por DNI / RUC
+
+Al escribir un DNI (8 dígitos) o RUC (11) del cliente en la venta (web y app), el nombre se completa solo con la Edge Function `customer-lookup`: primero busca en `customer` (no gasta consultas) y si no está consulta **api.migo.pe** y lo guarda en `customer`. El token de Migo está en Vault (`migo_token`, solo `service_role` con `public.migo_token()`). Si no se encuentra o no hay internet, el nombre se escribe a mano; nunca bloquea la venta. Solo reemplaza un nombre vacío o el que puso la búsqueda anterior.
+
 ## App Android (`android/`)
 
 Caja y ventas sin conexión: Kotlin + Jetpack Compose + Room (SQLite) + WorkManager + supabase-kt 3.8. AGP 9.1 con Kotlin integrado, compileSdk 36 (no subas el BOM de Compose a 2026.08+: pide SDK 37).
