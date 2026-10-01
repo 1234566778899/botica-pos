@@ -57,7 +57,7 @@ psql '<cadena>' -f supabase/seed.sql                      # alternativa: datos d
   - `customer_save`: todo el personal registra y edita clientes (ver "Clientes").
   - `inv_set_barcode`: todo el personal (también cajeros) puede asignar o quitar **solo** el código de barras de un producto; rechaza códigos que ya tiene otro producto.
 - Los precios y el stock de una venta se recalculan en el servidor; nunca confíes en los del cliente.
-- Tablas de catálogo (product, category, supplier, customer): el admin las escribe directo, protegido por RLS. Stock, ventas, compras y caja **no** tienen políticas de escritura: solo cambian por los workflows.
+- Tablas de catálogo (product, category, supplier, customer): el admin las escribe directo, protegido por RLS. Un `UPDATE` o `DELETE` que RLS bloquea **no da error**, solo afecta 0 filas: pide `.select()` y revisa que vuelva la fila (como en `useDeleteCustomer`). Stock, ventas, compras y caja **no** tienen políticas de escritura: solo cambian por los workflows.
 - Las vistas `product_stock` y `lot_status` son `security_invoker`. Las vistas `*_list` corren como dueño y filtran con `internal.is_staff()`.
 - Supabase activa **pg-safeupdate** en la API: todo `UPDATE`/`DELETE` necesita `WHERE`, también dentro de funciones (la fila única de `business` se actualiza con `where id = true`). El Postgres local de pruebas no lo tiene, así que revisa esto a mano.
 - Un cambio de esquema es una **nueva** migración en `supabase/migrations`. No edites las que ya se aplicaron.
@@ -73,7 +73,10 @@ En Ingresos → Nuevo, **Leer factura** sube una foto o PDF y rellena el ingreso
 
 - Edge Function `supabase/functions/inv-read-invoice` (Gemini `gemini-3.8-flash`, salida JSON con esquema, `thinkingLevel: low`, ~10 s). Valida la sesión y que sea personal activo; "Verify JWT" está apagado en el dashboard porque la función hace su propia validación. No guarda el archivo.
 - La clave de Gemini está en **Vault** (secreto `gemini_api_key`) y solo la lee `service_role` con `public.gemini_api_key()`. Nunca en el front ni en archivos versionados. Para cambiarla: `select vault.update_secret((select id from vault.secrets where name = 'gemini_api_key'), '<nueva>');`
-- La CLI de Supabase de esta máquina está en otra cuenta: la función se despliega pegando el código en el editor del dashboard (Edge Functions → inv-read-invoice → Code).
+- La CLI de Supabase de esta máquina está en otra cuenta, así que las Edge Functions (`inv-read-invoice` y `customer-lookup`) se despliegan desde el dashboard:
+  - Ve a Edge Functions → nombre → Code, pega el contenido de `supabase/functions/<nombre>/index.ts` y pulsa **Deploy updates** (pide confirmación).
+  - Desde el navegador automatizado, el editor es Monaco: `monaco.editor.getEditors()[0].getModel().setValue(código)`. Los avisos emergentes del dashboard tapan el botón: ciérralos antes.
+  - "Verify JWT" debe quedar apagado en Settings (las dos funciones validan la sesión ellas mismas).
 - `inv_match_invoice` empareja cada línea: primero por el código del proveedor ya usado (`supplier_product`), si no por similitud de nombre (`internal.match_products`, castiga si la concentración no coincide). En el front: ≥ 0.7 se enlaza solo, 0.3–0.7 pide confirmar, menos es producto nuevo.
 - `inv_receive_invoice` hace todo en una transacción: crea el proveedor (por RUC o nombre) y los productos nuevos, recuerda los códigos del proveedor y llama a `internal.receive_purchase`. Rechaza una factura ya registrada del mismo proveedor (`internal.invoice_key` ignora espacios y guiones) salvo `allow_duplicate`.
 - Los precios impresos pueden venir con o sin IGV: se detecta comparando la suma de las líneas con el subtotal. El costo se guarda **sin IGV** (la botica recupera el crédito fiscal). Vencimiento "07/2029" = último día del mes.
@@ -85,6 +88,7 @@ Pantalla **Clientes** (web `/clientes`; en la app, Ventas → Clientes). Todo el
 
 - `customer`: documento (DNI, RUC, CE, PAS; único), nombre, teléfono, correo, dirección y notas (sin datos de salud). La vista `customer_list` suma las compras completadas. `customer_sales(id)` da el historial con sus productos.
 - **En la venta solo se eligen clientes registrados** (búsqueda en memoria por DNI/RUC o nombre). Si no está, "Registrar cliente nuevo" abre la ficha con el documento escrito. La venta envía `customer.id`, y `sale.customer_name` y `customer_doc` guardan los datos de ese momento para el ticket. Si el id no existe (versiones antiguas o un cliente aún no sincronizado), `internal.create_sale` busca por documento o lo registra.
+- Al borrar un cliente en la web no se recarga su ficha (volvería vacía y mostraría "Cliente no encontrado"): se quita de la lista y se navega a `/clientes`. En TanStack Query, si el `onSuccess` del hook devuelve la promesa de `invalidateQueries`, la mutación la espera, y el `onSuccess` de `mutate()` no se ejecuta si el componente ya se desmontó.
 - `customer_save(p)`: valida igual que el front, es idempotente por `id` y rechaza un documento repetido. La excepción: si el cliente que ya existe no tiene datos de contacto, se completa ese. Con `sync: true` (cola de la app) une los dos clientes y solo completa los datos vacíos.
 - **Nombre automático:** con un DNI (8) o RUC (11) completo, la ficha llama a la Edge Function `customer-lookup`. Esta busca primero en `customer` (no gasta consultas) y si no lo encuentra consulta **api.migo.pe**. **No guarda nada**: el cliente se registra al confirmar la ficha. El token de Migo está en Vault (`migo_token`, solo `service_role` con `public.migo_token()`). Si no se encuentra o no hay internet, el nombre se escribe a mano. Solo reemplaza un nombre vacío o el que puso la búsqueda anterior.
 
@@ -96,6 +100,8 @@ Caja y ventas sin conexión: Kotlin + Jetpack Compose + Room (SQLite) + WorkMana
 cd android && JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradlew :app:assembleDebug
 ```
 
+- **`android/` está en `.gitignore`**: la app solo existe en esta máquina (no se sube con los commits).
+- APK para instalar: `cp android/app/build/outputs/apk/debug/app-debug.apk BoticaPOS-1.0-AAAAMMDD.apk` en la raíz del proyecto (los `*.apk` están en `.gitignore`). La release firmada (`botica-release.jks` + `keystore.properties`) no se usa desde el 26/09.
 - `android/local.properties` (fuera de git) lleva `sdk.dir`, `supabase.url` y `supabase.key` (solo la publishable key).
 - **Local primero.** Cada venta y cada turno se guardan en Room con un uuid generado en el teléfono y luego se suben (`data/sync/SyncManager.kt`): aperturas → ventas → cierres → bajar catálogo, stock y turno actual. Las RPC son idempotentes por id: reintentar nunca duplica.
 - Con internet la venta se envía con `strict: true` y el servidor la valida como en la web (si la rechaza, no se guarda). Sin internet queda pendiente; al subirla el servidor no la rechaza por falta de stock ni por producto desactivado: la registra y anota la diferencia en `sale.sync_notes`. El precio cobrado sin conexión solo se respeta si el producto cambió después de que el teléfono bajó el catálogo (`catalog_at`).
