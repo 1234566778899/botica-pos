@@ -9,7 +9,7 @@ import { useCashCurrent } from "@/modules/pos/api";
 
 type SessionRow = {
   id: string; opened_at: string; closed_at: string | null; opening_amount: number; expected_cash: number | null; counted_cash: number | null;
-  cashier: string | null; closed_by_name: string | null; sales_count: number; sales_total: number; note: string | null;
+  cashier: string | null; sales_count: number; sales_total: number; note: string | null;
 };
 
 function MethodBreakdown({ s }: { s: CashSummary }) {
@@ -33,7 +33,7 @@ function CloseCash({ session }: { session: CashSummary }) {
   const close = useMutation({
     mutationFn: async () => unwrap(await supabase.rpc("cash_close", { p_counted: Number(counted || 0), p_note: note })) as CashSummary,
     onSuccess: (s) => { setClosed(s); qc.invalidateQueries({ queryKey: ["cash-current"] }); qc.invalidateQueries({ queryKey: ["cash-sessions"] }); },
-    // Otro usuario pudo cerrarla antes: recargar muestra el estado real.
+    // Pudo cerrarla antes desde el teléfono: recargar muestra el estado real.
     onError: (e) => { toast(e.message, { error: true }); qc.invalidateQueries({ queryKey: ["cash-current"] }); qc.invalidateQueries({ queryKey: ["cash-sessions"] }); },
   });
   const diff = counted === "" ? null : Number(counted) - session.cash_expected;
@@ -49,7 +49,7 @@ function CloseCash({ session }: { session: CashSummary }) {
 
   return (
     <Card>
-      <CardHeader title="Cerrar caja" description="Cuenta el efectivo que hay en la caja (incluido el fondo inicial). Se cierra para todo el personal." />
+      <CardHeader title="Cerrar caja" description="Cuenta el efectivo que hay en la caja (incluido el fondo inicial)." />
       <form onSubmit={(e) => { e.preventDefault(); close.mutate(); }} className="space-y-3">
         <div className="relative">
           <span className="absolute top-1/2 left-3 -translate-y-1/2 text-ink-secondary">S/</span>
@@ -78,8 +78,7 @@ export function CashPage() {
   const columns: Column<SessionRow>[] = [
     { key: "o", header: "Apertura", render: (r) => formatDateTime(r.opened_at) },
     { key: "c", header: "Cierre", render: (r) => (r.closed_at ? formatDateTime(r.closed_at) : <Badge tone="success">Abierta</Badge>) },
-    { key: "u", header: "Abrió", render: (r) => r.cashier ?? "—" },
-    { key: "b", header: "Cerró", render: (r) => (r.closed_at ? r.closed_by_name ?? "—" : "") },
+    { key: "u", header: "Cajero", render: (r) => r.cashier ?? "—" },
     { key: "n", header: "Ventas", align: "right", render: (r) => r.sales_count },
     { key: "t", header: "Vendido", align: "right", render: (r) => <span className="tabular-nums">{formatMoney(r.sales_total)}</span> },
     { key: "e", header: "Efectivo esperado", align: "right", render: (r) => (r.expected_cash == null ? "—" : <span className="tabular-nums">{formatMoney(r.expected_cash)}</span>) },
@@ -98,7 +97,7 @@ export function CashPage() {
       {current.isLoading ? <Skeleton className="h-60" /> : current.data ? (
         <Layout aside={<CloseCash session={current.data} />}>
           <Card>
-            <CardHeader title="Turno actual" description={`Caja de la botica, abierta ${formatDateTime(current.data.opened_at)}${current.data.cashier ? ` por ${current.data.cashier}` : ""}`} actions={<Badge tone="success">Abierta</Badge>} />
+            <CardHeader title="Tu turno" description={`Abierto ${formatDateTime(current.data.opened_at)}`} actions={<Badge tone="success">Abierta</Badge>} />
             <div className="mb-4 grid grid-cols-3 gap-3">
               <div className="rounded-[14px] bg-surface-muted px-3 py-2.5"><p className="text-[12px] text-ink-secondary">Ventas</p><p className="text-[20px] font-[650] tabular-nums">{current.data.sales_count}</p></div>
               <div className="rounded-[14px] bg-surface-muted px-3 py-2.5"><p className="text-[12px] text-ink-secondary">Total vendido</p><p className="text-[20px] font-[650] tabular-nums">{formatMoney(current.data.sales_total)}</p></div>
@@ -108,8 +107,8 @@ export function CashPage() {
           </Card>
         </Layout>
       ) : (
-        <Banner tone="info" title="La caja está cerrada" action={<Button variant="primary" to="/vender">Abrir caja y vender</Button>}>
-          Ábrela desde la pantalla de venta con el fondo inicial del turno. Queda abierta para todo el personal hasta que alguien la cierre.
+        <Banner tone="info" title="Tu caja está cerrada" action={<Button variant="primary" to="/vender">Abrir caja y vender</Button>}>
+          Ábrela desde la pantalla de venta con el fondo inicial del turno. Cada usuario tiene su propia caja: tus ventas van a tu turno y lo cierras tú.
         </Banner>
       )}
 

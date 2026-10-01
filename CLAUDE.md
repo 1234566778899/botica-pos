@@ -36,7 +36,7 @@ psql '<cadena>' -f supabase/seed.sql                      # alternativa: datos d
   - La venta descuenta **FEFO**: primero el lote que vence antes, y nunca un lote vencido.
   - Lo vendible es `lot.expiry_date >= internal.today()`.
 - **Kardex** (`stock_movement`): todo cambio de stock queda registrado con el saldo resultante. Tipos: compra, venta, anulación, ajuste, vencido, merma.
-- **Una sola caja para toda la botica**: como máximo un `cash_session` abierto (índice único). Cualquiera del personal la abre, vende en ella y la cierra; se cierra para todos. `user_id` = quien abrió, `closed_by` = quien cerró. Usa `internal.open_session()`, nunca busques el turno por `auth.uid()`.
+- **Caja por usuario**: cada usuario abre su propio `cash_session` con su fondo, vende en él y lo cierra (índice único por `user_id` entre los abiertos); puede haber varios turnos abiertos a la vez. `closed_by` = quien cerró. `internal.open_session()` devuelve el turno abierto del usuario actual. (Entre el 29 y el 30/09/2026 la caja fue única; esos turnos pueden tener ventas de varios usuarios.)
 - **Precios con IGV incluido** (18 %, configurable en `business`). En el ticket el total se separa en op. gravada + IGV.
 - **Fechas en hora de Lima.** En SQL usa `internal.today()` y `created_at at time zone 'America/Lima'`, nunca `current_date`, porque Supabase corre en UTC. En el front usa `todayLima()`. Perú es UTC−5 todo el año.
 - **Roles** (`staff.role`):
@@ -76,7 +76,7 @@ cd android && JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/
 - **Local primero.** Cada venta y cada turno se guardan en Room con un uuid generado en el teléfono y luego se suben (`data/sync/SyncManager.kt`): aperturas → ventas → cierres → bajar catálogo, stock y turno actual. Las RPC son idempotentes por id: reintentar nunca duplica.
 - Con internet la venta se envía con `strict: true` y el servidor la valida como en la web (si la rechaza, no se guarda). Sin internet queda pendiente; al subirla el servidor no la rechaza por falta de stock ni por producto desactivado: la registra y anota la diferencia en `sale.sync_notes`. El precio cobrado sin conexión solo se respeta si el producto cambió después de que el teléfono bajó el catálogo (`catalog_at`).
 - Stock disponible en el teléfono = stock descargado − unidades de ventas con `applied = false` − carrito. `applied` pasa a true cuando se descarga un catálogo que ya las incluye.
-- Si la caja ya estaba abierta (en la web o por otro usuario), `cash_sync_open` devuelve ese turno y la app lo adopta (`cash_session.serverId`).
+- Si el usuario ya tenía su caja abierta (por ejemplo en la web), `cash_sync_open` devuelve ese turno y la app lo adopta (`cash_session.serverId`).
 - Pantallas: Vender, Productos (detalle, lotes y registro de códigos de barras), Ventas (historial del servidor + ventas del teléfono por subir) y Caja, con barra inferior.
 - Escáner propio con CameraX + ML Kit con el modelo **incluido** (`ui/components/Scanner.kt`): funciona sin internet desde la instalación. No uses el lector de Play Services (`play-services-code-scanner`): descarga su módulo la primera vez y sin internet no abre. En Vender el escáner es continuo (modo lector); en Productos lee un código y cierra.
 - Códigos registrados sin conexión van a la tabla local `barcode_change` y se aplican al catálogo local al instante; `replaceCatalog` los vuelve a aplicar mientras sigan pendientes. Room está en la versión 2: un cambio de esquema necesita una `Migration` (nunca `fallbackToDestructiveMigration`, borraría ventas sin subir).
