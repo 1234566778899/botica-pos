@@ -53,4 +53,22 @@ export function Ticket({ sale }: { sale: SaleDetail }) {
   );
 }
 
-export const printTicket = () => setTimeout(() => window.print(), 50);
+/**
+ * Chrome ignora `size: 80mm auto` y usa el alto del papel del driver (A4 o 297 mm): el ticket salía con
+ * mucho papel en blanco. Antes de imprimir se mide el ticket y se fija el alto exacto de la página.
+ */
+export const printTicket = () =>
+  setTimeout(() => {
+    const el = document.getElementById("ticket-print");
+    if (el) {
+      const mm = Math.ceil(el.scrollHeight * 25.4 / 96) + 10; // 4 mm de margen arriba y abajo + holgura
+      let style = document.getElementById("ticket-page") as HTMLStyleElement | null;
+      if (!style) {
+        style = document.createElement("style");
+        style.id = "ticket-page";
+        document.head.appendChild(style);
+      }
+      style.textContent = `@media print { @page { size: 80mm ${mm}mm; margin: 4mm; } }`;
+    }
+    window.print();
+  }, 50);

@@ -76,7 +76,7 @@ body {
   outline-offset: 1px;
 }
 
-/* Ticket de venta: al imprimir solo se ve el ticket (80 mm). */
+/* Ticket de venta: al imprimir solo se ve el ticket (80 mm). printTicket() fija el alto exacto de la página. */
 @media print {
   @page { size: 80mm auto; margin: 4mm; }
   body { background: #fff; }
