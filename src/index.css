@@ -79,8 +79,9 @@ body {
 /* Ticket de venta: al imprimir solo se ve el ticket (80 mm). printTicket() fija el alto exacto de la página. */
 @media print {
   @page { size: 80mm auto; margin: 4mm; }
-  body { background: #fff; }
-  body * { visibility: hidden; }
-  #ticket-print, #ticket-print * { visibility: visible; }
-  #ticket-print { position: absolute; inset: 0 auto auto 0; width: 72mm; }
+  html, body { background: #fff; height: auto; min-height: 0; margin: 0; padding: 0; }
+  /* display:none y no visibility:hidden: la app oculta seguiría ocupando su alto y el ticket saldría con páginas en blanco. */
+  body > :not(#ticket-print) { display: none !important; }
+  #ticket-print { position: static; width: 72mm; }
+  #ticket-print, #ticket-print * { break-inside: auto; }
 }

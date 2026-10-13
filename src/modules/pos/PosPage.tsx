@@ -165,6 +165,16 @@ export function PosPage() {
   // doble clic nunca registra la venta dos veces (pos_create_sale es idempotente por id). Si el
   // último intento quedó en duda (sin respuesta), el id se conserva aunque se recargue la página.
   const saleId = useRef<string | null>(readStored<string | null>(keys.sale, null));
+  // La canasta se vacía en cuanto la venta queda registrada, no al pulsar "Nueva venta": como se
+  // guarda en el navegador, recargar o cambiar de pantalla con el aviso abierto la volvía a mostrar.
+  const finishSale = useCallback((sale: SaleDetail) => {
+    writeStored(keys.sale, null);
+    saleId.current = null;
+    dispatch({ type: "clear" });
+    setCustomer(null);
+    setPaying(false);
+    setDone(sale);
+  }, [dispatch, keys.sale]);
   const cartSignature = useMemo(() => lines.map((l) => `${l.product.id}:${l.unit}:${l.quantity}`).join("|") + `#${customer?.id ?? ""}`, [lines, customer]);
   // Al recargar o al cambiar el carrito después de un cobro en duda, se pregunta al servidor si
   // esa venta llegó a registrarse: si llegó, se muestra su ticket; si no, el próximo cobro es nuevo.
@@ -177,13 +187,12 @@ export function PosPage() {
       writeStored(keys.sale, null);
       saleId.current = null;
       if (data) {
-        setPaying(false);
-        setDone(data as SaleDetail);
+        finishSale(data as SaleDetail);
         toast(`La venta ${ticketNumber((data as SaleDetail).number)} sí se registró antes de cortarse la conexión.`);
       }
     });
     return () => { alive = false; };
-  }, [cartSignature, keys.sale, toast]);
+  }, [cartSignature, keys.sale, toast, finishSale]);
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
 
@@ -264,7 +273,7 @@ export function PosPage() {
         customer: customer ? { id: customer.id, doc_number: customer.doc_number, name: customer.name } : undefined,
       },
       {
-        onSuccess: (sale) => { writeStored(keys.sale, null); setPaying(false); setDone(sale); },
+        onSuccess: finishSale,
         onError: (err) => {
           if (isConnectionError(err)) {
             setPayError("No se pudo confirmar el cobro por la conexión. Vuelve a pulsar Cobrar: si ya se registró, no se cobrará dos veces.");
