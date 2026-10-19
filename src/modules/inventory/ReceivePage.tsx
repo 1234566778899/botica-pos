@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { Badge, Banner, Button, Card, CardHeader, Checkbox, cn, Layout, Page, Select, Spinner, TextArea, TextField, useToast } from "@/components/ui";
 import { useBusiness } from "@/components/layout/AppFrame";
-import { addDays, formatMoney, formatUnits, todayLima, extraConcentration } from "@/lib/format";
+import { addDays, formatMoney, formatUnits, todayLima, extraConcentration, isBlisterForm } from "@/lib/format";
 import type { DosageForm, ProductStock } from "@/lib/types";
 import { usePosProducts } from "@/modules/pos/api";
 import { exactCodeMatch, searchProducts } from "@/modules/pos/search";
@@ -207,7 +207,7 @@ export function ReceivePage() {
           new_product: r.draft ? {
             name: r.draft.name, generic_name: r.draft.generic_name, form: r.draft.form, presentation: r.draft.presentation || null,
             laboratory: r.draft.laboratory, barcode: r.draft.barcode.trim() || null, units_per_pack: r.draft.units_per_pack, price_unit: Number(r.draft.price_unit),
-            ...(r.draft.price_blister && r.draft.units_per_pack >= r.draft.units_per_blister
+            ...(r.draft.price_blister && isBlisterForm(r.draft.form) && r.draft.units_per_pack >= r.draft.units_per_blister
               ? { units_per_blister: r.draft.units_per_blister, price_blister: Number(r.draft.price_blister) } : {}),
           } : undefined,
           supplier_code: r.src?.line.code ?? null,
@@ -361,7 +361,7 @@ export function ReceivePage() {
                           error={r.draft.price_unit === "" ? "Obligatorio" : undefined}
                           help={margin !== null ? `Margen ${margin} %` : `Costo ${formatMoney(net)} c/u`}
                           onChange={(e) => updateDraft(r.key, { price_unit: e.target.value })} />
-                        {r.draft.units_per_pack >= 5 ? (
+                        {r.draft.units_per_pack >= 5 && isBlisterForm(r.draft.form) ? (
                           <div className="grid grid-cols-[64px_1fr] gap-1">
                             <Select label="Blister" value={String(r.draft.units_per_blister)} onChange={(e) => updateDraft(r.key, { units_per_blister: Number(e.target.value) })}
                               options={[{ value: "10", label: "x10" }, { value: "5", label: "x5" }]} />

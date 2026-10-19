@@ -68,6 +68,9 @@ export const formLabels: Record<string, string> = {
   unguento: "Ungüento", inyectable: "Inyectable", sobre: "Sobre", inhalador: "Inhalador", ovulo: "Óvulo", solucion: "Solución", spray: "Spray", otro: "Otro",
 };
 
+/** Solo las tabletas y cápsulas vienen en blister; un jarabe o una crema se vende por unidad y caja. */
+export const isBlisterForm = (form: string) => form === "tableta" || form === "capsula";
+
 /** Concentración a mostrar junto al nombre, o null si el nombre ya la incluye ("PARACETAMOL 500 MG"). */
 export const extraConcentration = (name: string, concentration: string | null | undefined) => {
   if (!concentration) return null;

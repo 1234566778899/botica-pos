@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { isUuid } from "@/lib/supabase";
 import { Badge, Banner, Button, Card, CardHeader, Checkbox, Layout, Modal, NotFound, Page, Select, Skeleton, TextArea, TextField, useToast } from "@/components/ui";
-import { daysUntil, expiryLabel, formatLotDate, formatMoney, formatUnits, formLabels } from "@/lib/format";
+import { daysUntil, expiryLabel, formatLotDate, formatMoney, formatUnits, formLabels, isBlisterForm } from "@/lib/format";
 import type { DosageForm, Lot } from "@/lib/types";
 import { useIsAdmin } from "@/modules/auth/AuthProvider";
 import { useCategories } from "@/modules/pos/api";
@@ -76,6 +76,7 @@ export function ProductFormPage() {
   const packPrice = d.price_pack ?? Number(d.price_unit) * d.units_per_pack;
   // Con blister ya no hay precio de caja: la caja son N blisters al precio del blister.
   const blisterFits = d.units_per_pack >= d.units_per_blister;
+  const showBlister = isBlisterForm(d.form) && d.units_per_pack >= 5;
   const blistersPerPack = d.units_per_pack % d.units_per_blister === 0 ? d.units_per_pack / d.units_per_blister : null;
   const blisterHelp = d.price_blister == null
     ? "Vacío = no se vende por blister."
@@ -141,7 +142,11 @@ export function ProductFormPage() {
             <TextField label="Nombre comercial" required className="sm:col-span-2" {...text("name")} placeholder="Panadol Antigripal" />
             <TextField label="Principio activo (genérico)" {...text("generic_name")} placeholder="Paracetamol" help="Sirve para encontrar equivalentes en la venta." />
             <TextField label="Concentración" {...text("concentration")} placeholder="500 mg" />
-            <Select label="Forma farmacéutica" value={d.form} onChange={(e) => set({ form: e.target.value as DosageForm })} disabled={!isAdmin}
+            <Select label="Forma farmacéutica" value={d.form} onChange={(e) => {
+                const form = e.target.value as DosageForm;
+                // Al pasar a jarabe, crema, etc. se borra el precio de blister para que no quede guardado y oculto.
+                set({ form, ...(isBlisterForm(form) ? {} : { price_blister: null }) });
+              }} disabled={!isAdmin}
               options={Object.entries(formLabels).map(([value, label]) => ({ value, label }))} />
             <TextField label="Presentación" {...text("presentation")} placeholder="Caja x 100 tabletas" />
             <TextField label="Código de barras" {...text("barcode")} placeholder="Escanéalo aquí" />
@@ -156,12 +161,12 @@ export function ProductFormPage() {
               onChange={(e) => setUnitsPerPack(Math.max(1, Number(e.target.value) || 1))} help="1 si se vende por frasco/tubo." />
             <TextField label="Precio por unidad" type="number" min="0" step="0.01" prefix="S/" value={d.price_unit} disabled={!isAdmin}
               onChange={(e) => set({ price_unit: Number(e.target.value) })} help={margin !== null ? `Margen ${margin} %` : undefined} />
-            {d.units_per_pack > 1 && !blisterFits && (
+            {d.units_per_pack > 1 && !(showBlister && blisterFits) && (
               <TextField label="Precio por caja" type="number" min="0" step="0.01" prefix="S/" value={d.price_pack ?? ""} disabled={!isAdmin}
                 placeholder={packPrice.toFixed(2)} onChange={(e) => set({ price_pack: e.target.value === "" ? null : Number(e.target.value) })} help="Vacío = unidad × cantidad." />
             )}
           </div>
-          {d.units_per_pack >= 5 && (
+          {showBlister && (
             <div className="mt-3 grid gap-3 sm:grid-cols-3">
               <Select label="Unidades por blister" value={String(d.units_per_blister)} disabled={!isAdmin}
                 onChange={(e) => set({ units_per_blister: Number(e.target.value) })}

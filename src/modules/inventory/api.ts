@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase, unwrap } from "@/lib/supabase";
+import { isBlisterForm } from "@/lib/format";
 import type { Lot, LotStatus, Product, ProductStock, Supplier } from "@/lib/types";
 
 /** Invalida todo lo que depende del stock. */
@@ -39,7 +40,7 @@ export function useSaveProduct() {
     mutationFn: async (p: ProductDraft) => {
       const { id, ...row } = p;
       const clean = { ...row, barcode: row.barcode?.trim() || null, code: row.code?.trim() || null, price_pack: row.price_pack || null,
-        price_blister: row.units_per_pack >= row.units_per_blister ? row.price_blister ?? null : null };
+        price_blister: isBlisterForm(row.form) && row.units_per_pack >= row.units_per_blister ? row.price_blister ?? null : null };
       const res = id ? await supabase.from("product").update(clean).eq("id", id).select("id").single() : await supabase.from("product").insert(clean).select("id").single();
       return unwrap(res).id as string;
     },
