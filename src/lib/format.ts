@@ -68,6 +68,9 @@ export const formLabels: Record<string, string> = {
   unguento: "Ungüento", inyectable: "Inyectable", sobre: "Sobre", inhalador: "Inhalador", ovulo: "Óvulo", solucion: "Solución", spray: "Spray", otro: "Otro",
 };
 
+/** Deja solo los dígitos: las unidades no llevan decimales. */
+export const digits = (s: string) => s.replace(/\D/g, "");
+
 /** Solo las tabletas y cápsulas vienen en blister; un jarabe o una crema se vende por unidad y caja. */
 export const isBlisterForm = (form: string) => form === "tableta" || form === "capsula";
 

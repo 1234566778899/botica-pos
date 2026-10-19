@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { isUuid } from "@/lib/supabase";
 import { Badge, Banner, Button, Card, CardHeader, Checkbox, Layout, Modal, NotFound, Page, Select, Skeleton, TextArea, TextField, useToast } from "@/components/ui";
-import { daysUntil, expiryLabel, formatLotDate, formatMoney, formatUnits, formLabels, isBlisterForm } from "@/lib/format";
+import { daysUntil, expiryLabel, formatLotDate, formatMoney, formatUnits, formLabels, digits, isBlisterForm } from "@/lib/format";
 import type { DosageForm, Lot } from "@/lib/types";
 import { useIsAdmin } from "@/modules/auth/AuthProvider";
 import { useCategories } from "@/modules/pos/api";
@@ -36,7 +36,7 @@ function AdjustModal({ lot, perPack, onClose }: { lot: Lot | null; perPack: numb
         <p className="text-ink-secondary">Stock actual: <strong className="text-ink">{formatUnits(lot.quantity, perPack)}</strong> ({lot.quantity} unidades)</p>
         <Select label="Motivo" value={type} onChange={(e) => setType(e.target.value as typeof type)}
           options={[{ value: "ajuste", label: "Conteo físico / corrección" }, { value: "vencido", label: "Baja por vencimiento" }, { value: "merma", label: "Merma (roto, dañado, perdido)" }]} />
-        <TextField label="Nueva cantidad (unidades)" type="number" min="0" value={qty} onChange={(e) => setQty(e.target.value)}
+        <TextField label="Nueva cantidad (unidades)" type="text" inputMode="numeric" value={qty} onChange={(e) => setQty(digits(e.target.value))}
           help={qty !== "" ? `Diferencia: ${Number(qty) - lot.quantity > 0 ? "+" : ""}${Number(qty) - lot.quantity} unidades` : undefined} />
         <TextArea label="Nota" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Opcional" />
       </div>
@@ -157,8 +157,8 @@ export function ProductFormPage() {
         <Card>
           <CardHeader title="Precio y unidades" />
           <div className="grid gap-3 sm:grid-cols-3">
-            <TextField label="Unidades por caja" type="number" min="1" value={d.units_per_pack} disabled={!isAdmin}
-              onChange={(e) => setUnitsPerPack(Math.max(1, Number(e.target.value) || 1))} help="1 si se vende por frasco/tubo." />
+            <TextField label="Unidades por caja" type="text" inputMode="numeric" value={d.units_per_pack} disabled={!isAdmin}
+              onChange={(e) => setUnitsPerPack(Math.max(1, Number(digits(e.target.value)) || 1))} help="1 si se vende por frasco/tubo." />
             <TextField label="Precio por unidad" type="number" min="0" step="0.01" prefix="S/" value={d.price_unit} disabled={!isAdmin}
               onChange={(e) => set({ price_unit: Number(e.target.value) })} help={margin !== null ? `Margen ${margin} %` : undefined} />
             {d.units_per_pack > 1 && !(showBlister && blisterFits) && (
@@ -179,7 +179,7 @@ export function ProductFormPage() {
             </div>
           )}
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
-            <TextField label="Stock mínimo (unidades)" type="number" min="0" value={d.min_stock} disabled={!isAdmin} onChange={(e) => set({ min_stock: Number(e.target.value) || 0 })}
+            <TextField label="Stock mínimo (unidades)" type="text" inputMode="numeric" value={d.min_stock} disabled={!isAdmin} onChange={(e) => set({ min_stock: Number(digits(e.target.value)) || 0 })}
               help="Avisa como “stock bajo” al llegar aquí." />
             {d.units_per_pack > 1 && (
               <div className="pt-6 sm:col-span-2">

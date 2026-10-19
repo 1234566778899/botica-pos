@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { Badge, Banner, Button, Card, CardHeader, Checkbox, cn, Layout, Page, Select, Spinner, TextArea, TextField, useToast } from "@/components/ui";
 import { useBusiness } from "@/components/layout/AppFrame";
-import { addDays, formatMoney, formatUnits, todayLima, extraConcentration, isBlisterForm } from "@/lib/format";
+import { addDays, formatMoney, formatUnits, todayLima, extraConcentration, digits, isBlisterForm } from "@/lib/format";
 import type { DosageForm, ProductStock } from "@/lib/types";
 import { usePosProducts } from "@/modules/pos/api";
 import { exactCodeMatch, searchProducts } from "@/modules/pos/search";
@@ -90,14 +90,14 @@ function rowFromLine(line: InvoiceLine, product: ProductStock | null, src: Sourc
         name: line.name.toUpperCase(), generic_name: line.generic_name, form: line.form, laboratory: line.laboratory,
         presentation: linePack > 1 ? `${unitWord} x ${linePack}` : unitWord, units_per_pack: linePack, price_unit: "", units_per_blister: linePack % 10 !== 0 && linePack % 5 === 0 ? 5 : 10, price_blister: "", barcode: "",
       },
-      qty: String(line.quantity), unit: linePack > 1 ? "caja" : "unidad", cost: trim4(price),
+      qty: String(Math.round(line.quantity)), unit: linePack > 1 ? "caja" : "unidad", cost: trim4(price),
     };
   }
   // La caja de la factura es la misma del catálogo: se registra en cajas. Si no, en unidades.
   if (product.units_per_pack === linePack) {
-    return { ...base, product, draft: null, qty: String(line.quantity), unit: linePack > 1 ? "caja" : "unidad", cost: trim4(price) };
+    return { ...base, product, draft: null, qty: String(Math.round(line.quantity)), unit: linePack > 1 ? "caja" : "unidad", cost: trim4(price) };
   }
-  return { ...base, product, draft: null, qty: String(line.quantity * linePack), unit: "unidad", cost: trim4(price / linePack) };
+  return { ...base, product, draft: null, qty: String(Math.round(line.quantity * linePack)), unit: "unidad", cost: trim4(price / linePack) };
 }
 
 export function ReceivePage() {
@@ -355,8 +355,8 @@ export function ReceivePage() {
                     {r.draft && r.confirmed && (
                       <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-[1fr_120px_140px_140px]">
                         <TextField label="Nombre del producto nuevo" className="col-span-2 sm:col-span-1" value={r.draft.name} onChange={(e) => updateDraft(r.key, { name: e.target.value.toUpperCase() })} />
-                        <TextField label="Unidades por caja" type="number" min="1" value={r.draft.units_per_pack}
-                          onChange={(e) => updateDraft(r.key, { units_per_pack: Math.max(1, Number(e.target.value) || 1) })} />
+                        <TextField label="Unidades por caja" type="text" inputMode="numeric" value={r.draft.units_per_pack}
+                          onChange={(e) => updateDraft(r.key, { units_per_pack: Math.max(1, Number(digits(e.target.value)) || 1) })} />
                         <TextField label="Precio venta unidad" type="number" min="0" step="0.10" prefix="S/" value={r.draft.price_unit}
                           error={r.draft.price_unit === "" ? "Obligatorio" : undefined}
                           help={margin !== null ? `Margen ${margin} %` : `Costo ${formatMoney(net)} c/u`}
@@ -380,7 +380,7 @@ export function ReceivePage() {
                       <TextField label="Lote" value={r.lot} onChange={(e) => update(r.key, { lot: e.target.value.toUpperCase() })} placeholder="L2409" />
                       <TextField label="Vencimiento" type="date" value={r.expiry} min={today} onChange={(e) => update(r.key, { expiry: e.target.value })}
                         error={days !== null && days < 90 ? (days < 0 ? "Ya está vencido" : `Vence en ${days} días`) : undefined} />
-                      <TextField label="Cantidad" type="number" min="1" value={r.qty} onChange={(e) => update(r.key, { qty: e.target.value })} />
+                      <TextField label="Cantidad" type="text" inputMode="numeric" value={r.qty} onChange={(e) => update(r.key, { qty: digits(e.target.value) })} />
                       {packOf(r) > 1 ? (
                         <Select label="Unidad" value={r.unit} onChange={(e) => {
                           const unit = e.target.value as Row["unit"];
