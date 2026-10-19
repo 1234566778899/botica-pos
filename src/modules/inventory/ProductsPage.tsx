@@ -5,6 +5,7 @@ import { Badge, Button, EmptyState, IndexTable, IndexToolbar, Page, type Column 
 import { daysUntil, expiryLabel, formatExpiry, formatMoney, formatUnits, normalize, extraConcentration } from "@/lib/format";
 import type { ProductStock } from "@/lib/types";
 import { useIsAdmin } from "@/modules/auth/AuthProvider";
+import { hasBlister } from "@/modules/pos/cart";
 import { useProducts } from "./api";
 
 type View = "todos" | "bajo" | "vencer" | "agotados" | "receta" | "inactivos";
@@ -65,7 +66,9 @@ export function ProductsPage() {
       },
     },
     { key: "flags", header: "", render: (p) => <span className="flex gap-1">{p.requires_prescription && <Badge tone="warning">Receta</Badge>}{p.expired_units > 0 && <Badge tone="critical">{p.expired_units} vencidas</Badge>}</span> },
-    { key: "price", header: "Precio", align: "right", className: "whitespace-nowrap", render: (p) => <span className="tabular-nums">{formatMoney(p.price_unit)}{p.units_per_pack > 1 && <span className="block text-[11px] text-ink-tertiary">caja {formatMoney(p.price_pack ?? p.price_unit * p.units_per_pack)}</span>}</span> },
+    { key: "price", header: "Precio", align: "right", className: "whitespace-nowrap", render: (p) => <span className="tabular-nums">{formatMoney(p.price_unit)}{hasBlister(p)
+      ? <span className="block text-[11px] text-ink-tertiary">blister x{p.units_per_blister} {formatMoney(p.price_blister!)}</span>
+      : p.units_per_pack > 1 && <span className="block text-[11px] text-ink-tertiary">caja {formatMoney(p.price_pack ?? p.price_unit * p.units_per_pack)}</span>}</span> },
     ...(isAdmin ? [{ key: "value", header: "Valor (costo)", align: "right" as const, className: "whitespace-nowrap", render: (p: ProductStock) => <span className="tabular-nums">{formatMoney(p.stock_value)}</span> }] : []),
   ];
 

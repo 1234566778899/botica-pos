@@ -73,7 +73,10 @@ export type Product = {
   units_per_pack: number;
   sell_by_unit: boolean;
   price_unit: number;
+  /** Precio de la caja; con blister lo calcula la base: precio blister × blisters por caja. */
   price_pack: number | null;
+  units_per_blister: number;
+  price_blister: number | null;
   cost_unit: number;
   min_stock: number;
   requires_prescription: boolean;
@@ -118,7 +121,7 @@ export type LotStatus = Lot & {
 };
 
 export type PaymentMethod = "efectivo" | "yape" | "plin" | "tarjeta" | "transferencia";
-export type SaleUnit = "unidad" | "caja";
+export type SaleUnit = "unidad" | "blister" | "caja";
 
 export type SaleItem = {
   id: string;

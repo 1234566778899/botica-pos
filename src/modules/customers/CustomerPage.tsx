@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { isUuid } from "@/lib/supabase";
 import { Badge, Banner, Button, Card, CardHeader, Layout, Modal, NotFound, Page, Skeleton, useToast } from "@/components/ui";
-import { formatDate, formatDateTime, formatMoney, paymentLabels, pluralize } from "@/lib/format";
+import { formatDate, formatDateTime, formatMoney, paymentLabels, pluralize, saleUnitLabel } from "@/lib/format";
 import type { Customer } from "@/lib/types";
 import { useIsAdmin, useStaff } from "@/modules/auth/AuthProvider";
 import { ticketNumber } from "@/modules/pos/Ticket";
@@ -131,7 +131,7 @@ function Purchases({ customerId }: { customerId: string }) {
                     <span className={`ml-auto font-[650] tabular-nums ${s.status === "anulada" ? "text-ink-tertiary line-through" : ""}`}>{formatMoney(s.total)}</span>
                   </div>
                   <p className="mt-0.5 text-[12px] text-ink-secondary">
-                    {s.items.map((i) => `${i.product_name} ×${i.quantity}${i.unit === "caja" ? (i.quantity === 1 ? " caja" : " cajas") : ""}`).join(" · ") || pluralize(s.item_count, "artículo", "artículos")}
+                    {s.items.map((i) => `${i.product_name} ×${i.quantity}${i.unit === "unidad" ? "" : ` ${saleUnitLabel(i.unit, i.quantity)}`}`).join(" · ") || pluralize(s.item_count, "artículo", "artículos")}
                   </p>
                 </li>
               );

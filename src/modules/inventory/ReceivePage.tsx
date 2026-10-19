@@ -13,7 +13,7 @@ import { detectIgvIncluded, expiryDate, FOUND_SCORE, linePrice, matchInvoice, re
 /** Producto que no existe y se creará al registrar el ingreso. */
 type Draft = {
   name: string; generic_name: string | null; form: DosageForm; laboratory: string | null; presentation: string;
-  units_per_pack: number; price_unit: string; price_pack: string; barcode: string;
+  units_per_pack: number; price_unit: string; units_per_blister: number; price_blister: string; barcode: string;
 };
 
 /** Línea leída de la factura: found = enlazada sola; review = hay que confirmar; new = se creará. */
@@ -88,7 +88,7 @@ function rowFromLine(line: InvoiceLine, product: ProductStock | null, src: Sourc
       ...base, product: null,
       draft: {
         name: line.name.toUpperCase(), generic_name: line.generic_name, form: line.form, laboratory: line.laboratory,
-        presentation: linePack > 1 ? `${unitWord} x ${linePack}` : unitWord, units_per_pack: linePack, price_unit: "", price_pack: "", barcode: "",
+        presentation: linePack > 1 ? `${unitWord} x ${linePack}` : unitWord, units_per_pack: linePack, price_unit: "", units_per_blister: linePack % 10 !== 0 && linePack % 5 === 0 ? 5 : 10, price_blister: "", barcode: "",
       },
       qty: String(line.quantity), unit: linePack > 1 ? "caja" : "unidad", cost: trim4(price),
     };
@@ -207,7 +207,8 @@ export function ReceivePage() {
           new_product: r.draft ? {
             name: r.draft.name, generic_name: r.draft.generic_name, form: r.draft.form, presentation: r.draft.presentation || null,
             laboratory: r.draft.laboratory, barcode: r.draft.barcode.trim() || null, units_per_pack: r.draft.units_per_pack, price_unit: Number(r.draft.price_unit),
-            price_pack: r.draft.price_pack ? Number(r.draft.price_pack) : null,
+            ...(r.draft.price_blister && r.draft.units_per_pack >= r.draft.units_per_blister
+              ? { units_per_blister: r.draft.units_per_blister, price_blister: Number(r.draft.price_blister) } : {}),
           } : undefined,
           supplier_code: r.src?.line.code ?? null,
           lot_number: r.lot, expiry_date: r.expiry, units: toUnits(r), cost_unit: Math.round(costPerUnit(r) * 10000) / 10000,
@@ -360,9 +361,14 @@ export function ReceivePage() {
                           error={r.draft.price_unit === "" ? "Obligatorio" : undefined}
                           help={margin !== null ? `Margen ${margin} %` : `Costo ${formatMoney(net)} c/u`}
                           onChange={(e) => updateDraft(r.key, { price_unit: e.target.value })} />
-                        {r.draft.units_per_pack > 1 ? (
-                          <TextField label="Precio venta caja" type="number" min="0" step="0.10" prefix="S/" value={r.draft.price_pack} placeholder="Opcional"
-                            onChange={(e) => updateDraft(r.key, { price_pack: e.target.value })} />
+                        {r.draft.units_per_pack >= 5 ? (
+                          <div className="grid grid-cols-[64px_1fr] gap-1">
+                            <Select label="Blister" value={String(r.draft.units_per_blister)} onChange={(e) => updateDraft(r.key, { units_per_blister: Number(e.target.value) })}
+                              options={[{ value: "10", label: "x10" }, { value: "5", label: "x5" }]} />
+                            <TextField label="Precio blister" type="number" min="0" step="0.10" prefix="S/" value={r.draft.price_blister} placeholder="Opcional"
+                              disabled={r.draft.units_per_pack < r.draft.units_per_blister}
+                              onChange={(e) => updateDraft(r.key, { price_blister: e.target.value })} />
+                          </div>
                         ) : <div className="hidden sm:block" />}
                         <TextField label="Código de barras" className="col-span-2 sm:col-span-1" value={r.draft.barcode} placeholder="Escanéalo o escríbelo"
                           onChange={(e) => updateDraft(r.key, { barcode: e.target.value.replace(/\s/g, "") })}

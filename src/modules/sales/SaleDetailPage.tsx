@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useParams } from "react-router";
 import { isUuid } from "@/lib/supabase";
 import { Badge, Banner, Button, Card, CardHeader, Layout, Modal, NotFound, Page, Skeleton, TextArea, useToast } from "@/components/ui";
-import { formatDateTime, formatMoney, paymentLabels } from "@/lib/format";
+import { formatDateTime, formatMoney, paymentLabels, saleUnitLabel } from "@/lib/format";
 import { useIsAdmin } from "@/modules/auth/AuthProvider";
 import { printTicket, Ticket, ticketNumber } from "@/modules/pos/Ticket";
 import { useSale, useVoidSale } from "./api";
@@ -71,7 +71,7 @@ export function SaleDetailPage() {
                   <p className="font-[550]">{i.product_name}</p>
                   {i.description && <p className="text-[12px] text-ink-secondary">{i.description}</p>}
                 </div>
-                <span className="text-ink-secondary tabular-nums">{i.quantity} {i.unit === "caja" ? (i.quantity === 1 ? "caja" : "cajas") : "u."} × {formatMoney(i.unit_price)}</span>
+                <span className="text-ink-secondary tabular-nums">{i.quantity} {saleUnitLabel(i.unit, i.quantity)} × {formatMoney(i.unit_price)}</span>
                 <span className="w-24 text-right font-[550] tabular-nums">{formatMoney(i.total)}</span>
               </li>
             ))}

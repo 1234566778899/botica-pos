@@ -52,6 +52,10 @@ export function formatUnits(units: number, perPack = 1) {
   return `${pluralize(packs, "caja", "cajas")}${rest ? ` + ${rest} u.` : ""}`;
 }
 
+/** Unidad de una línea de venta: "u.", "blister(s)" o "caja(s)". */
+export const saleUnitLabel = (unit: string, qty: number) =>
+  unit === "caja" ? (qty === 1 ? "caja" : "cajas") : unit === "blister" ? (qty === 1 ? "blister" : "blisters") : "u.";
+
 /** Minúsculas y sin tildes, para buscar "ibuprofeno" = "Ibuprofeno". */
 export const normalize = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 

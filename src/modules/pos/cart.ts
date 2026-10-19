@@ -12,13 +12,34 @@ type Action =
   /** Catálogo recargado: las líneas toman el precio y el stock nuevos. */
   | { type: "refresh"; products: ProductStock[] };
 
-export const unitsPer = (line: Pick<CartLine, "product" | "unit">) => (line.unit === "caja" ? line.product.units_per_pack : 1);
+/** El producto viene en blisters (de 10 o 5) y tiene precio por blister. */
+export const hasBlister = (p: Pick<ProductStock, "price_blister" | "units_per_blister" | "units_per_pack">) =>
+  p.price_blister != null && p.units_per_pack >= p.units_per_blister;
+
+/** Formas de vender el producto: unidad y blister; la caja solo si no tiene blister (la caja son N blisters). */
+export function saleUnits(p: ProductStock): SaleUnit[] {
+  const units: SaleUnit[] = [];
+  if (p.sell_by_unit || p.units_per_pack === 1) units.push("unidad");
+  if (hasBlister(p)) units.push("blister");
+  else if (p.units_per_pack > 1) units.push("caja");
+  return units;
+}
+
+export const unitSize = (p: ProductStock, unit: SaleUnit) =>
+  unit === "caja" ? p.units_per_pack : unit === "blister" ? p.units_per_blister : 1;
+
+export const unitsPer = (line: Pick<CartLine, "product" | "unit">) => unitSize(line.product, line.unit);
 
 export const unitPrice = (p: ProductStock, unit: SaleUnit) =>
-  unit === "caja" ? Number(p.price_pack ?? Number(p.price_unit) * p.units_per_pack) : Number(p.price_unit);
+  unit === "caja" ? Number(p.price_pack ?? Number(p.price_unit) * p.units_per_pack)
+  : unit === "blister" ? Number(p.price_blister ?? Number(p.price_unit) * p.units_per_blister)
+  : Number(p.price_unit);
 
-/** Unidad por defecto: "caja" si el producto no se vende fraccionado. */
-export const defaultUnit = (p: ProductStock): SaleUnit => (!p.sell_by_unit && p.units_per_pack > 1 ? "caja" : "unidad");
+/** Unidad por defecto: la unidad, o el blister (o la caja) si el producto no se vende fraccionado. */
+export const defaultUnit = (p: ProductStock): SaleUnit => saleUnits(p)[0] ?? "unidad";
+
+/** Shift+Enter: la presentación más grande que se vende (blister o caja). */
+export const bigUnit = (p: ProductStock): SaleUnit => saleUnits(p).at(-1) ?? "unidad";
 
 function reducer(lines: CartLine[], action: Action): CartLine[] {
   switch (action.type) {
@@ -29,8 +50,13 @@ function reducer(lines: CartLine[], action: Action): CartLine[] {
     }
     case "set-qty":
       return action.quantity <= 0 ? lines.filter((_, j) => j !== action.index) : lines.map((l, j) => (j === action.index ? { ...l, quantity: action.quantity } : l));
-    case "set-unit":
-      return lines.map((l, j) => (j === action.index ? { ...l, unit: action.unit } : l));
+    case "set-unit": {
+      // Si ya hay una línea del mismo producto con esa unidad, se juntan.
+      const line = lines[action.index];
+      const other = lines.findIndex((l, j) => j !== action.index && l.product.id === line.product.id && l.unit === action.unit);
+      if (other < 0) return lines.map((l, j) => (j === action.index ? { ...l, unit: action.unit } : l));
+      return lines.flatMap((l, j) => (j === action.index ? [] : j === other ? [{ ...l, quantity: l.quantity + line.quantity }] : [l]));
+    }
     case "remove":
       return lines.filter((_, j) => j !== action.index);
     case "clear":

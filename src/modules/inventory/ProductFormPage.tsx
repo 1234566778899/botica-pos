@@ -11,7 +11,7 @@ import { useAdjustLot, useProduct, useProductLots, useSaveProduct, type ProductD
 
 const blank: ProductDraft = {
   name: "", generic_name: "", concentration: "", form: "tableta", presentation: "", laboratory: "", category_id: null, barcode: "", code: "",
-  units_per_pack: 1, sell_by_unit: true, price_unit: 0, price_pack: null, min_stock: 0, requires_prescription: false, is_controlled: false,
+  units_per_pack: 1, sell_by_unit: true, price_unit: 0, price_pack: null, units_per_blister: 10, price_blister: null, min_stock: 0, requires_prescription: false, is_controlled: false,
   igv_exempt: false, location: "", is_active: true,
 };
 
@@ -74,6 +74,15 @@ export function ProductFormPage() {
   const set = (patch: Partial<ProductDraft>) => setD({ ...d, ...patch });
   const text = (k: keyof ProductDraft) => ({ value: (d[k] as string | null) ?? "", onChange: (e: React.ChangeEvent<HTMLInputElement>) => set({ [k]: e.target.value }), disabled: !isAdmin });
   const packPrice = d.price_pack ?? Number(d.price_unit) * d.units_per_pack;
+  // Con blister ya no hay precio de caja: la caja son N blisters al precio del blister.
+  const blisterFits = d.units_per_pack >= d.units_per_blister;
+  const blistersPerPack = d.units_per_pack % d.units_per_blister === 0 ? d.units_per_pack / d.units_per_blister : null;
+  const blisterHelp = d.price_blister == null
+    ? "Vacío = no se vende por blister."
+    : [`S/ ${(Number(d.price_blister) / d.units_per_blister).toFixed(2)} por unidad`, blistersPerPack && `caja (${blistersPerPack} blisters) ${formatMoney(Number(d.price_blister) * blistersPerPack)}`].filter(Boolean).join(" · ");
+  const setUnitsPerPack = (n: number) =>
+    // Una caja x15 o x25 no se arma con blisters de 10: se pasa a blister de 5.
+    set({ units_per_pack: n, ...(n % 10 !== 0 && n % 5 === 0 ? { units_per_blister: 5 } : n % 10 === 0 && d.price_blister == null ? { units_per_blister: 10 } : {}) });
   const margin = product && Number(d.price_unit) > 0 ? Math.round((1 - Number(product.cost_unit) / Number(d.price_unit)) * 100) : null;
 
   const submit = () => {
@@ -144,20 +153,32 @@ export function ProductFormPage() {
           <CardHeader title="Precio y unidades" />
           <div className="grid gap-3 sm:grid-cols-3">
             <TextField label="Unidades por caja" type="number" min="1" value={d.units_per_pack} disabled={!isAdmin}
-              onChange={(e) => set({ units_per_pack: Math.max(1, Number(e.target.value) || 1) })} help="1 si se vende por frasco/tubo." />
+              onChange={(e) => setUnitsPerPack(Math.max(1, Number(e.target.value) || 1))} help="1 si se vende por frasco/tubo." />
             <TextField label="Precio por unidad" type="number" min="0" step="0.01" prefix="S/" value={d.price_unit} disabled={!isAdmin}
               onChange={(e) => set({ price_unit: Number(e.target.value) })} help={margin !== null ? `Margen ${margin} %` : undefined} />
-            {d.units_per_pack > 1 && (
+            {d.units_per_pack > 1 && !blisterFits && (
               <TextField label="Precio por caja" type="number" min="0" step="0.01" prefix="S/" value={d.price_pack ?? ""} disabled={!isAdmin}
                 placeholder={packPrice.toFixed(2)} onChange={(e) => set({ price_pack: e.target.value === "" ? null : Number(e.target.value) })} help="Vacío = unidad × cantidad." />
             )}
           </div>
+          {d.units_per_pack >= 5 && (
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <Select label="Unidades por blister" value={String(d.units_per_blister)} disabled={!isAdmin}
+                onChange={(e) => set({ units_per_blister: Number(e.target.value) })}
+                options={[{ value: "10", label: "10 por blister" }, { value: "5", label: "5 por blister" }]}
+                error={!blisterFits ? `La caja trae menos de ${d.units_per_blister} unidades` : undefined} />
+              {blisterFits && (
+                <TextField label="Precio por blister" type="number" min="0" step="0.01" prefix="S/" value={d.price_blister ?? ""} disabled={!isAdmin}
+                  placeholder="Opcional" onChange={(e) => set({ price_blister: e.target.value === "" ? null : Number(e.target.value) })} help={blisterHelp} />
+              )}
+            </div>
+          )}
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
             <TextField label="Stock mínimo (unidades)" type="number" min="0" value={d.min_stock} disabled={!isAdmin} onChange={(e) => set({ min_stock: Number(e.target.value) || 0 })}
               help="Avisa como “stock bajo” al llegar aquí." />
             {d.units_per_pack > 1 && (
               <div className="pt-6 sm:col-span-2">
-                <Checkbox label="Se vende por unidad (fraccionado)" help="Desmárcalo si solo se vende la caja completa." checked={d.sell_by_unit} onChange={(e) => set({ sell_by_unit: e.target.checked })} disabled={!isAdmin} />
+                <Checkbox label="Se vende por unidad (fraccionado)" help="Desmárcalo si solo se vende por blister o caja completa." checked={d.sell_by_unit} onChange={(e) => set({ sell_by_unit: e.target.checked })} disabled={!isAdmin} />
               </div>
             )}
           </div>

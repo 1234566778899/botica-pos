@@ -8,7 +8,7 @@ import type { Customer, PaymentMethod, ProductStock, SaleDetail, SaleUnit } from
 import { supabase, translateError } from "@/lib/supabase";
 import { useStaff } from "@/modules/auth/AuthProvider";
 import { useCashCurrent, useCategories, useCreateSale, useOpenCash, usePosProducts } from "./api";
-import { defaultUnit, readStored, unitPrice, unitsPer, useCart, writeStored } from "./cart";
+import { bigUnit, defaultUnit, readStored, saleUnits, unitPrice, unitSize, unitsPer, useCart, writeStored } from "./cart";
 import { CustomerPicker } from "./CustomerPicker";
 import { PaymentModal } from "./PaymentModal";
 import { type PhoneScanResult, usePhoneScanner } from "./phoneScanner";
@@ -53,8 +53,7 @@ function ProductRow({ p, available, active, onAdd, onHover, onShowEquivalents, e
   const days = daysUntil(p.next_expiry);
   const soon = days !== null && days <= 90;
   const outOfStock = available <= 0;
-  const canUnit = p.sell_by_unit || p.units_per_pack === 1;
-  const hasPack = p.units_per_pack > 1;
+  const units = saleUnits(p);
 
   return (
     <li
@@ -87,20 +86,13 @@ function ProductRow({ p, available, active, onAdd, onHover, onShowEquivalents, e
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
-        {canUnit && (
-          <button type="button" disabled={outOfStock} onClick={() => onAdd("unidad")}
+        {units.map((u) => (
+          <button key={u} type="button" disabled={available < unitSize(p, u)} onClick={() => onAdd(u)}
             className="flex h-12 min-w-[92px] flex-col items-center justify-center rounded-[10px] bg-white px-2 shadow-button hover:bg-surface-hover disabled:opacity-40">
-            <span className="text-[15px] font-[700] tabular-nums">{formatMoney(p.price_unit)}</span>
-            <span className="text-[11px] text-ink-secondary">{hasPack ? "unidad" : "agregar"}</span>
+            <span className="text-[15px] font-[700] tabular-nums">{formatMoney(unitPrice(p, u))}</span>
+            <span className="text-[11px] text-ink-secondary">{u === "unidad" ? (p.units_per_pack > 1 ? "unidad" : "agregar") : `${u} x${unitSize(p, u)}`}</span>
           </button>
-        )}
-        {hasPack && (
-          <button type="button" disabled={available < p.units_per_pack} onClick={() => onAdd("caja")}
-            className="flex h-12 min-w-[92px] flex-col items-center justify-center rounded-[10px] bg-white px-2 shadow-button hover:bg-surface-hover disabled:opacity-40">
-            <span className="text-[15px] font-[700] tabular-nums">{formatMoney(unitPrice(p, "caja"))}</span>
-            <span className="text-[11px] text-ink-secondary">caja x{p.units_per_pack}</span>
-          </button>
-        )}
+        ))}
       </div>
     </li>
   );
@@ -213,7 +205,7 @@ export function PosPage() {
   const focusSearch = () => searchRef.current?.focus();
 
   const add = useCallback((p: ProductStock, unit: SaleUnit = defaultUnit(p)) => {
-    const need = unit === "caja" ? p.units_per_pack : 1;
+    const need = unitSize(p, unit);
     const left = p.stock - unitsInCart(p.id);
     if (left < need) return toast(left <= 0 ? `${p.name}: sin stock disponible` : `${p.name}: solo quedan ${formatUnits(left, p.units_per_pack)}`, { error: true });
     dispatch({ type: "add", product: p, unit });
@@ -253,9 +245,9 @@ export function PosPage() {
       // Lector de código de barras: escribe el código y Enter.
       const exact = exactCodeMatch(all, query);
       const target = exact ?? results[active];
-      const box = e.shiftKey;
-      if (target) add(target, box && target.units_per_pack > 1 ? "caja" : defaultUnit(target));
-      else if (query.trim()) findByCode(query).then((p) => p && add(p, box && p.units_per_pack > 1 ? "caja" : defaultUnit(p)));
+      const unitFor = (p: ProductStock) => (e.shiftKey ? bigUnit(p) : defaultUnit(p));
+      if (target) add(target, unitFor(target));
+      else if (query.trim()) findByCode(query).then((p) => p && add(p, unitFor(p)));
     }
   };
 
@@ -298,7 +290,7 @@ export function PosPage() {
     }
     const unit = defaultUnit(p);
     const left = p.stock - unitsInCart(p.id);
-    if (left < (unit === "caja" ? p.units_per_pack : 1)) {
+    if (left < unitSize(p, unit)) {
       toast(`📱 ${p.name}: sin stock disponible`, { error: true });
       return { ok: false, text: `${p.name}: sin stock` };
     }
@@ -393,7 +385,7 @@ export function PosPage() {
         <p className="hidden shrink-0 gap-4 border-t border-border px-4 py-2 text-[11px] text-ink-tertiary lg:flex">
           <span><kbd className="font-sans font-[650]">↑ ↓</kbd> elegir</span>
           <span><kbd className="font-sans font-[650]">Enter</kbd> agregar</span>
-          <span><kbd className="font-sans font-[650]">Shift + Enter</kbd> agregar caja</span>
+          <span><kbd className="font-sans font-[650]">Shift + Enter</kbd> agregar blister</span>
           <span><kbd className="font-sans font-[650]">F9</kbd> cobrar</span>
           <span><kbd className="font-sans font-[650]">Esc</kbd> limpiar</span>
         </p>
@@ -429,7 +421,8 @@ export function PosPage() {
                     <div className="flex items-start gap-2">
                       <div className="min-w-0 flex-1">
                         <p className="text-[14px] leading-tight font-[650]">{p.name} {extraConcentration(p.name, p.concentration) && <span className="font-[450] text-ink-secondary">{extraConcentration(p.name, p.concentration)}</span>}</p>
-                        <p className="text-[12px] text-ink-secondary">{formatMoney(price)} {l.unit === "caja" ? `por caja x${p.units_per_pack}` : "c/u"}</p>
+                        <p className="text-[12px] text-ink-secondary">{formatMoney(price)} {l.unit === "unidad" ? "c/u" : `por ${l.unit} x${unitsPer(l)}`}
+                          {l.unit === "blister" && p.units_per_pack % p.units_per_blister === 0 && <span className="text-ink-tertiary"> · caja = {p.units_per_pack / p.units_per_blister} blisters</span>}</p>
                       </div>
                       <button type="button" onClick={() => dispatch({ type: "remove", index: i })} aria-label={`Quitar ${p.name}`} className="grid size-7 place-items-center rounded-[8px] text-ink-tertiary hover:bg-critical-soft hover:text-critical-strong">
                         <Trash2 className="size-4" />
@@ -447,9 +440,9 @@ export function PosPage() {
                         />
                         <button type="button" onClick={() => (!canAddMore ? toast("No hay más stock de este producto", { error: true }) : dispatch({ type: "set-qty", index: i, quantity: l.quantity + 1 }))} aria-label="Más" className="grid size-9 place-items-center rounded-[10px] hover:bg-surface-pressed"><Plus className="size-4" /></button>
                       </div>
-                      {p.units_per_pack > 1 && p.sell_by_unit && (
+                      {saleUnits(p).length > 1 && (
                         <div className="flex rounded-[10px] bg-surface-muted p-0.5 text-[12px] font-[550]">
-                          {(["unidad", "caja"] as const).map((u) => (
+                          {saleUnits(p).map((u) => (
                             <button key={u} type="button" onClick={() => dispatch({ type: "set-unit", index: i, unit: u })}
                               className={cn("h-8 rounded-[8px] px-2.5 capitalize", l.unit === u ? "bg-white shadow-button" : "text-ink-secondary")}>{u}</button>
                           ))}

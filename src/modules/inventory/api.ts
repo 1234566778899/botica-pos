@@ -38,7 +38,8 @@ export function useSaveProduct() {
   return useMutation({
     mutationFn: async (p: ProductDraft) => {
       const { id, ...row } = p;
-      const clean = { ...row, barcode: row.barcode?.trim() || null, code: row.code?.trim() || null, price_pack: row.price_pack || null };
+      const clean = { ...row, barcode: row.barcode?.trim() || null, code: row.code?.trim() || null, price_pack: row.price_pack || null,
+        price_blister: row.units_per_pack >= row.units_per_blister ? row.price_blister ?? null : null };
       const res = id ? await supabase.from("product").update(clean).eq("id", id).select("id").single() : await supabase.from("product").insert(clean).select("id").single();
       return unwrap(res).id as string;
     },
@@ -99,7 +100,7 @@ export function useReceive() {
 
 export type NewProductInput = {
   name: string; generic_name: string | null; form: string; presentation: string | null; laboratory: string | null; barcode: string | null;
-  units_per_pack: number; price_unit: number; price_pack: number | null;
+  units_per_pack: number; price_unit: number; units_per_blister?: number; price_blister?: number;
 };
 
 export type InvoiceReceiveItem = Omit<ReceiveItem, "product_id"> & { product_id?: string; new_product?: NewProductInput; supplier_code?: string | null };

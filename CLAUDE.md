@@ -31,7 +31,8 @@ psql '<cadena>' -f supabase/seed.sql                      # alternativa: datos d
 
 ## Dominio
 
-- **Stock en unidades.** Un producto tiene `units_per_pack` (caja x100). Se vende por unidad o por caja. Si `sell_by_unit = false`, solo se vende la caja completa.
+- **Stock en unidades.** Un producto tiene `units_per_pack` (caja x100). Se vende por **unidad y por blister**. Si `sell_by_unit = false`, no se vende la unidad suelta.
+- **Blister** (`units_per_blister` 10 o 5, `price_blister`): su precio es menor que el de 10 unidades sueltas. Ya no se escribe precio de caja: la caja son N blisters al precio del blister (el trigger `internal.product_blister` calcula `price_pack`, así la app Android, que aún vende "caja", cobra lo mismo). Al crear tabletas o cápsulas con precio de caja y sin precio de blister (cuadro, Android), el blister sale de la caja. Sin precio de blister (frascos, ampollas) se vende por unidad y caja como antes. En la venta, Shift+Enter agrega el blister.
 - **Lotes** (`lot`): cada ingreso crea o suma un lote con número y vencimiento.
   - La venta descuenta **FEFO**: primero el lote que vence antes, y nunca un lote vencido.
   - Lo vendible es `lot.expiry_date >= internal.today()`.
@@ -68,7 +69,7 @@ psql '<cadena>' -f supabase/seed.sql                      # alternativa: datos d
 - Supabase activa **pg-safeupdate** en la API: todo `UPDATE`/`DELETE` necesita `WHERE`, también dentro de funciones (la fila única de `business` se actualiza con `where id = true`). El Postgres local de pruebas no lo tiene, así que revisa esto a mano.
 - Un cambio de esquema es una **nueva** migración en `supabase/migrations`. No edites las que ya se aplicaron.
 - La pantalla de venta (`src/modules/pos`) carga todo el catálogo activo y busca en memoria (`search.ts`) para que sea instantánea. Atajos:
-  - Enter agrega el producto y Shift+Enter agrega la caja.
+  - Enter agrega el producto y Shift+Enter agrega el blister (o la caja si no tiene blister).
   - F2 va al buscador y F9 cobra.
   - El lector de código de barras escribe el código y manda Enter.
 - UI en español de Perú. Montos con `formatMoney` ("S/ 1,259.90") y stock con `formatUnits` ("3 cajas + 12 u.").

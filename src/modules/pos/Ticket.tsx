@@ -1,6 +1,6 @@
 import { createPortal } from "react-dom";
 import { useBusiness } from "@/components/layout/AppFrame";
-import { formatDateTime, formatMoney, paymentLabels } from "@/lib/format";
+import { formatDateTime, formatMoney, paymentLabels, saleUnitLabel } from "@/lib/format";
 import type { SaleDetail } from "@/lib/types";
 
 export const ticketNumber = (n: number) => `T001-${String(n).padStart(6, "0")}`;
@@ -29,7 +29,7 @@ export function Ticket({ sale }: { sale: SaleDetail }) {
         <div key={i.id} className="mb-1">
           <p className="font-bold">{i.product_name}</p>
           <div className={row}>
-            <span>{i.quantity} {i.unit === "caja" ? (i.quantity === 1 ? "caja" : "cajas") : "u."} × {Number(i.unit_price).toFixed(2)}</span>
+            <span>{i.quantity} {saleUnitLabel(i.unit, i.quantity)} × {Number(i.unit_price).toFixed(2)}</span>
             <span>{Number(i.total).toFixed(2)}</span>
           </div>
         </div>
