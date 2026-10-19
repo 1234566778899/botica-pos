@@ -52,6 +52,8 @@ export const router = createBrowserRouter([
           { path: "productos/:id", lazy: lazy(() => import("@/modules/inventory/ProductFormPage"), "ProductFormPage") },
           { path: "ingresos", lazy: lazy(() => import("@/modules/inventory/PurchasesPage"), "PurchasesPage") },
           { path: "ingresos/nuevo", lazy: lazy(() => import("@/modules/inventory/ReceivePage"), "ReceivePage") },
+          { path: "ingresos/:id", lazy: lazy(() => import("@/modules/inventory/PurchaseDetailPage"), "PurchaseDetailPage") },
+          { path: "ingresos/:id/agregar", lazy: lazy(() => import("@/modules/inventory/ReceivePage"), "ReceivePage") },
           { path: "vencimientos", lazy: lazy(() => import("@/modules/inventory/ExpiryPage"), "ExpiryPage") },
           {
             Component: AdminOnly,

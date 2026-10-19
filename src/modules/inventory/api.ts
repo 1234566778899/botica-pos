@@ -88,6 +88,29 @@ export function usePurchases() {
   });
 }
 
+export function usePurchase(id: string | undefined) {
+  return useQuery({
+    queryKey: ["purchases", "detail", id],
+    enabled: Boolean(id),
+    queryFn: async () => unwrap(await supabase.from("purchase_list").select("*").eq("id", id!).maybeSingle()) as PurchaseRow | null,
+  });
+}
+
+export type PurchaseItemRow = {
+  id: string; product_id: string; lot_number: string; expiry_date: string | null; units: number; cost_unit: number; total: number; created_at: string;
+  product: { name: string; concentration: string | null; units_per_pack: number } | null;
+};
+
+export function usePurchaseItems(id: string | undefined) {
+  return useQuery({
+    queryKey: ["purchases", "items", id],
+    enabled: Boolean(id),
+    queryFn: async () =>
+      unwrap(await supabase.from("purchase_item").select("id, product_id, lot_number, expiry_date, units, cost_unit, total, created_at, product(name, concentration, units_per_pack)")
+        .eq("purchase_id", id!).order("created_at")) as unknown as PurchaseItemRow[],
+  });
+}
+
 export type ReceiveItem = { product_id: string; lot_number: string; expiry_date: string; units: number; cost_unit: number };
 
 export function useReceive() {
@@ -112,6 +135,8 @@ export function useReceiveInvoice() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (p: {
+      /** Id del envío: reintentar no duplica. Con purchase_id, las líneas se agregan a ese ingreso. */
+      id: string; purchase_id?: string;
       supplier_id: string | null; supplier: { name: string; ruc: string | null } | null; invoice_number: string; note: string;
       allow_duplicate: boolean; items: InvoiceReceiveItem[];
     }) => unwrap(await supabase.rpc("inv_receive_invoice", { p })) as { id: string; number: number },

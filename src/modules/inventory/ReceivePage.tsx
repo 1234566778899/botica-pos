@@ -1,13 +1,14 @@
 import { FileScan, PackagePlus, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router";
-import { Badge, Banner, Button, Card, CardHeader, Checkbox, cn, Layout, Page, Select, Spinner, TextArea, TextField, useToast } from "@/components/ui";
+import { useNavigate, useParams, useSearchParams } from "react-router";
+import { Badge, Banner, Button, Card, CardHeader, Checkbox, cn, Layout, NotFound, Page, Select, Skeleton, Spinner, TextArea, TextField, useToast } from "@/components/ui";
 import { useBusiness } from "@/components/layout/AppFrame";
-import { addDays, formatMoney, formatUnits, todayLima, extraConcentration, digits, isBlisterForm } from "@/lib/format";
+import { addDays, formatMoney, formatUnits, todayLima, extraConcentration, digits, isBlisterForm, pluralize } from "@/lib/format";
 import type { DosageForm, ProductStock } from "@/lib/types";
 import { usePosProducts } from "@/modules/pos/api";
 import { exactCodeMatch, searchProducts } from "@/modules/pos/search";
-import { useReceiveInvoice, useSuppliers } from "./api";
+import { usePurchase, usePurchaseItems, useReceiveInvoice, useSuppliers } from "./api";
+import { isUuid } from "@/lib/supabase";
 import { detectIgvIncluded, expiryDate, FOUND_SCORE, linePrice, matchInvoice, readInvoice, REVIEW_SCORE, type InvoiceData, type InvoiceLine } from "./invoice";
 
 /** Producto que no existe y se creará al registrar el ingreso. */
@@ -100,8 +101,15 @@ function rowFromLine(line: InvoiceLine, product: ProductStock | null, src: Sourc
   return { ...base, product, draft: null, qty: String(Math.round(line.quantity * linePack)), unit: "unidad", cost: trim4(price / linePack) };
 }
 
+/** /ingresos/nuevo registra un ingreso; /ingresos/:id/agregar suma productos olvidados a uno ya registrado. */
 export function ReceivePage() {
   const navigate = useNavigate();
+  const { id: targetId } = useParams();
+  const appending = targetId !== undefined;
+  const { data: target, isLoading: loadingTarget } = usePurchase(isUuid(targetId) ? targetId : undefined);
+  const { data: targetItems = [] } = usePurchaseItems(isUuid(targetId) ? targetId : undefined);
+  // Id del envío: un doble clic o un reintento después de un corte no lo registra dos veces.
+  const sendId = useRef(crypto.randomUUID());
   const toast = useToast();
   const [params] = useSearchParams();
   const { data: products = [] } = usePosProducts();
@@ -165,16 +173,22 @@ export function ReceivePage() {
         if (top && top.score >= REVIEW_SCORE && suggestions.length) return rowFromLine(line, null, { line, status: "review", suggestions });
         return rowFromLine(line, null, { line, status: "new", suggestions });
       });
-      setRows((r) => [...r, ...read]);
+      // Al agregar a un ingreso, las líneas que ya están en él (mismo producto y lote) no se repiten.
+      const already = (r: Row) => r.product && targetItems.some((i) => i.product_id === r.product!.id && (!r.lot || i.lot_number === r.lot));
+      const fresh = appending ? read.filter((r) => !already(r)) : read;
+      setRows((r) => [...r, ...fresh]);
       setDoc(inv);
       setIgvIncluded(detectIgvIncluded(inv) ?? false);
-      if (inv.invoice_number && !invoice) setInvoice(inv.invoice_number);
-      if (match.supplier) { setSupplier(match.supplier.id); setNewSupplier(null); }
-      else if (inv.supplier_name && !supplier) { setNewSupplier({ name: inv.supplier_name.toUpperCase(), ruc: inv.supplier_ruc }); setSupplier(SUPPLIER_NEW); }
-      setDuplicate(match.duplicate);
-      setAllowDuplicate(false);
-      const pending = read.filter((r) => r.src?.status !== "found").length;
-      toast(`${read.length} productos leídos${pending ? ` · ${pending} por revisar` : ""}`);
+      if (!appending) {
+        if (inv.invoice_number && !invoice) setInvoice(inv.invoice_number);
+        if (match.supplier) { setSupplier(match.supplier.id); setNewSupplier(null); }
+        else if (inv.supplier_name && !supplier) { setNewSupplier({ name: inv.supplier_name.toUpperCase(), ruc: inv.supplier_ruc }); setSupplier(SUPPLIER_NEW); }
+        setDuplicate(match.duplicate);
+        setAllowDuplicate(false);
+      }
+      const pending = fresh.filter((r) => r.src?.status !== "found").length;
+      const skipped = read.length - fresh.length;
+      toast(`${fresh.length} productos leídos${pending ? ` · ${pending} por revisar` : ""}${skipped ? ` · ${skipped} ya estaban en el ingreso` : ""}`);
     } catch (e) {
       toast(e instanceof Error ? e.message : String(e), { error: true });
     } finally {
@@ -186,7 +200,9 @@ export function ReceivePage() {
   const total = rows.reduce((n, r) => n + toUnits(r) * costPerUnit(r), 0);
   const today = todayLima();
   const docSubtotal = doc?.subtotal ?? null;
-  const subtotalOff = docSubtotal != null && Math.abs(total - docSubtotal) > Math.max(1, docSubtotal * 0.01);
+  // Al agregar, la factura se compara con lo ya registrado más lo nuevo.
+  const withTarget = total + (appending ? Number(target?.total ?? 0) : 0);
+  const subtotalOff = docSubtotal != null && Math.abs(withTarget - docSubtotal) > Math.max(1, docSubtotal * 0.01);
 
   const submit = () => {
     if (rows.length === 0) return toast("Agrega al menos un producto", { error: true });
@@ -199,6 +215,7 @@ export function ReceivePage() {
     if (duplicate && !allowDuplicate) return toast(`Esta factura ya se registró en el ingreso #${duplicate.number}`, { error: true });
     receive.mutate(
       {
+        id: sendId.current, purchase_id: target?.id,
         supplier_id: supplier && supplier !== SUPPLIER_NEW ? supplier : null,
         supplier: supplier === SUPPLIER_NEW ? newSupplier : null,
         invoice_number: invoice, note, allow_duplicate: allowDuplicate,
@@ -214,7 +231,14 @@ export function ReceivePage() {
           lot_number: r.lot, expiry_date: r.expiry, units: toUnits(r), cost_unit: Math.round(costPerUnit(r) * 10000) / 10000,
         })),
       },
-      { onSuccess: (p) => { toast(`Ingreso #${p.number} registrado`); navigate("/ingresos"); }, onError: (e) => toast(e.message, { error: true }) },
+      {
+        onSuccess: (p) => {
+          if (appending) { toast(`Productos agregados al ingreso #${p.number}`); navigate(`/ingresos/${p.id}`); }
+          else { toast(`Ingreso #${p.number} registrado`); navigate("/ingresos"); }
+        },
+        // Si el servidor lo rechazó, el próximo intento es otro envío.
+        onError: (e) => { sendId.current = crypto.randomUUID(); toast(e.message, { error: true }); },
+      },
     );
   };
 
@@ -224,12 +248,16 @@ export function ReceivePage() {
   ];
   const fromInvoice = rows.some((r) => r.src);
 
+  const crumbs = [{ label: "Ingresos", to: "/ingresos" }, ...(target ? [{ label: `Ingreso #${target.number}`, to: `/ingresos/${target.id}` }] : [])];
+  if (appending && (!isUuid(targetId) || (!loadingTarget && !target))) return <NotFound title="Ingreso no encontrado" back={crumbs[0]} />;
+  if (appending && !target) return <Page title="Agregar productos" breadcrumbs={crumbs}><Skeleton className="h-80" /></Page>;
+
   return (
-    <Page title="Nuevo ingreso" breadcrumbs={[{ label: "Ingresos", to: "/ingresos" }]} largeTitle width="full"
+    <Page title={target ? `Agregar al ingreso #${target.number}` : "Nuevo ingreso"} breadcrumbs={crumbs} largeTitle width="full"
       actions={
         <>
           <Button icon={FileScan} onClick={() => fileRef.current?.click()} loading={reading}>Leer factura</Button>
-          <Button variant="primary" icon={PackagePlus} onClick={submit} loading={receive.isPending} disabled={reading}>Registrar ingreso</Button>
+          <Button variant="primary" icon={PackagePlus} onClick={submit} loading={receive.isPending} disabled={reading}>{target ? "Agregar al ingreso" : "Registrar ingreso"}</Button>
         </>
       }>
       <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
@@ -239,21 +267,29 @@ export function ReceivePage() {
             <Card>
               <CardHeader title="Documento" />
               <div className="space-y-3">
+                {target ? (
+                  <dl className="space-y-1.5">
+                    <div className="flex justify-between gap-3"><dt className="text-ink-secondary">Proveedor</dt><dd className="text-right">{target.supplier_name ?? "—"}</dd></div>
+                    <div className="flex justify-between gap-3"><dt className="text-ink-secondary">Factura / guía</dt><dd className="text-right">{target.invoice_number ?? "—"}</dd></div>
+                    <div className="flex justify-between gap-3"><dt className="text-ink-secondary">Ya registrado</dt><dd className="text-right">{pluralize(target.item_count, "producto", "productos")} · {formatMoney(target.total)}</dd></div>
+                  </dl>
+                ) : <>
                 <Select label="Proveedor" value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="Sin proveedor" options={supplierOptions}
                   help={supplier === SUPPLIER_NEW ? "Se creará al registrar el ingreso." : undefined} />
                 <TextField label="N.° de factura o guía" value={invoice} onChange={(e) => setInvoice(e.target.value)} placeholder="F001-000123" />
+                </>}
                 {fromInvoice && (
                   <Checkbox label="Los precios de la factura incluyen IGV" checked={igvIncluded} onChange={(e) => setIgvIncluded(e.target.checked)}
                     help="Se detecta comparando las líneas con el subtotal. El costo se guarda sin IGV." />
                 )}
-                <TextArea label="Nota" rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
+                {!target && <TextArea label="Nota" rows={2} value={note} onChange={(e) => setNote(e.target.value)} />}
               </div>
             </Card>
             <Card>
               <CardHeader title="Resumen" />
               <p className="text-ink-secondary">{rows.length} productos · {rows.reduce((n, r) => n + toUnits(r), 0)} unidades</p>
               <p className="mt-1 text-[22px] font-[650] tabular-nums">{formatMoney(total)}</p>
-              <p className="text-[12px] text-ink-tertiary">Costo total del ingreso (sin IGV)</p>
+              <p className="text-[12px] text-ink-tertiary">{target ? `Costo de lo que se agrega (sin IGV) · el ingreso queda en ${formatMoney(withTarget)}` : "Costo total del ingreso (sin IGV)"}</p>
               {docSubtotal != null && (
                 <p className={cn("mt-2 text-[12px]", subtotalOff ? "font-[550] text-warning" : "text-ink-secondary")}>
                   Subtotal de la factura: {formatMoney(docSubtotal)}{subtotalOff ? " · no cuadra, revisa cantidades y costos" : " · cuadra"}
@@ -283,7 +319,7 @@ export function ReceivePage() {
           <ProductPicker onPick={addProduct} />
           {rows.length === 0 ? (
             <div className="py-10 text-center text-ink-secondary">
-              <p>Busca o escanea los productos que llegaron,</p>
+              <p>{target ? "Busca o escanea los productos que faltaron en el ingreso," : "Busca o escanea los productos que llegaron,"}</p>
               <p>o usa <strong className="text-ink">Leer factura</strong> con una foto o PDF de la factura del proveedor.</p>
             </div>
           ) : (

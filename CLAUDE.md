@@ -88,6 +88,7 @@ En Ingresos → Nuevo, **Leer factura** sube una foto o PDF y rellena el ingreso
 - `inv_receive_invoice` hace todo en una transacción: crea el proveedor (por RUC o nombre) y los productos nuevos, recuerda los códigos del proveedor y llama a `internal.receive_purchase`. Rechaza una factura ya registrada del mismo proveedor (`internal.invoice_key` ignora espacios y guiones) salvo `allow_duplicate`.
 - Los precios impresos pueden venir con o sin IGV: se detecta comparando la suma de las líneas con el subtotal. El costo se guarda **sin IGV** (la botica recupera el crédito fiscal). Vencimiento "07/2029" = último día del mes.
 - Si la caja de la factura no coincide con la del catálogo (`units_per_pack`), la línea se registra en unidades y se avisa.
+- **Agregar a un ingreso ya registrado** (solo web): en el detalle `/ingresos/:id`, "Agregar productos" abre la misma pantalla en `/ingresos/:id/agregar`. `inv_receive_invoice` con `purchase_id` suma las líneas a ese ingreso (su proveedor, sin revisar la factura duplicada) y su total; el id del envío queda en `purchase_item.client_id`, así que reintentar no duplica. Al leer la factura ahí, se omiten las líneas que ya están en el ingreso (mismo producto y lote).
 
 ## Clientes
 

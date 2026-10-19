@@ -1,9 +1,11 @@
 import { PackagePlus, Plus } from "lucide-react";
+import { useNavigate } from "react-router";
 import { Button, EmptyState, IndexTable, Page, type Column } from "@/components/ui";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { usePurchases, type PurchaseRow } from "./api";
 
 export function PurchasesPage() {
+  const navigate = useNavigate();
   const { data = [], isLoading } = usePurchases();
   const columns: Column<PurchaseRow>[] = [
     { key: "n", header: "Ingreso", render: (r) => <span className="font-[650]">#{r.number}</span> },
@@ -17,6 +19,7 @@ export function PurchasesPage() {
   return (
     <Page icon={PackagePlus} title="Ingresos de mercadería" actions={<Button variant="primary" icon={Plus} to="/ingresos/nuevo">Nuevo ingreso</Button>}>
       <IndexTable rows={data} columns={columns} getId={(r) => r.id} loading={isLoading} selectable={false}
+        onRowClick={(r) => navigate(`/ingresos/${r.id}`)}
         resourceName={{ singular: "ingreso", plural: "ingresos" }}
         empty={<EmptyState icon={PackagePlus} title="Aún no hay ingresos" description="Registra la mercadería que llega de tus proveedores para sumar stock con su lote y vencimiento." action={<Button variant="primary" to="/ingresos/nuevo">Nuevo ingreso</Button>} />} />
     </Page>
