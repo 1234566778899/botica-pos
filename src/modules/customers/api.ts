@@ -112,7 +112,7 @@ export function searchCustomers(list: Customer[], query: string, limit = Infinit
 }
 
 /**
- * Nombre por DNI (8) o RUC (11): primero los clientes registrados, si no api.migo.pe
+ * Nombre por DNI (8) o RUC (11): primero los clientes registrados, si no Decolecta (Migo de respaldo)
  * (Edge Function customer-lookup). Devuelve null si no se encontró.
  */
 export async function lookupDocName(doc: string): Promise<string | null> {
